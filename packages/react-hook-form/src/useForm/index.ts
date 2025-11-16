@@ -232,6 +232,9 @@ export const useForm = <
    * - Nếu props.disableServerSideValidation được truyền => dùng props
    * - Nếu không => dùng options từ RefineProvider (global)
    * - Cả hai false => bật mapping lỗi server -> form
+   *
+   * 📖 Optional chaining (options?.disableServerSideValidation):
+   * - Tránh lỗi nếu options hoặc field không tồn tại (undefined/null)
    */
 
   // Hook dịch i18n
@@ -250,6 +253,7 @@ export const useForm = <
 
   // useHookFormResult chứa control, register, handleSubmit,...
   // rest: các props của RHF truyền từ caller (defaultValues, resolver,...)
+  // 📖 rest parameter ({ ...rest }): gom các prop còn lại thành một object.
   const useHookFormResult = useHookForm<TVariables, TContext>({
     ...rest,
   });
@@ -350,7 +354,15 @@ export const useForm = <
     },
   });
 
+  // Destructuring lấy các utility quan trọng từ refine core
   const { query, onFinish, formLoading, onFinishAutoSave } = useFormCoreResult;
+  /**
+   * 📖 Destructuring với alias/cùng tên:
+   * - query: kết quả từ useQuery (getOne/getList tùy action)
+   * - onFinish: hàm call mutation create/update/clone
+   * - formLoading: cờ loading tổng (fetch + mutation)
+   * - onFinishAutoSave: biến thể của onFinish dùng cho auto-save
+   */
 
   // ============================================================================
   // PHẦN 6: ĐỒNG BỘ DỮ LIỆU FETCH ĐƯỢC VÀO REACT-HOOK-FORM
@@ -418,12 +430,23 @@ export const useForm = <
   }, [watch]);
 
   const onValuesChange = (changeValues: TVariables) => {
-    // Nếu bật warnWhenUnsavedChanges => setWarnWhen(true) để kích hoạt modal cảnh báo
+    /**
+     * 🔔 setWarnWhen(true) làm gì?
+     * - Kích hoạt cờ "có thay đổi chưa lưu" trong UnsavedWarnContext.
+     * - Nếu user rời trang (đi link khác/đóng tab) và warnWhenUnsavedChanges=true,
+     *   refine sẽ hiển thị modal xác nhận để tránh mất dữ liệu.
+     */
     if (warnWhenUnsavedChanges) {
       setWarnWhen(true);
     }
 
-    // Tính năng auto-save của refine core
+    /**
+     * 💾 Auto-save:
+     * - Nếu enable, ta tắt cảnh báo (setWarnWhen(false)) để không làm phiền user
+     *   trong lúc auto-save chạy.
+     * - onFinishProps: callback transform trước khi gửi lên server (nếu user cấu hình),
+     *   mặc định trả về chính values.
+     */
     if (refineCoreProps?.autoSave?.enabled) {
       setWarnWhen(false);
 
@@ -432,7 +455,7 @@ export const useForm = <
 
       /**
        * onFinishAutoSave: hàm của refine core
-       * - nhận payload (có thể qua onFinishProps để transform)
+       * - nhận payload (đã transform)
        * - trả Promise -> có catch để nuốt lỗi, tránh crash luồng watch
        */
       return onFinishAutoSave(onFinishProps(changeValues)).catch(
@@ -440,6 +463,7 @@ export const useForm = <
       );
     }
 
+    // Nếu không auto-save, chỉ trả về values (có thể dùng ở nơi khác nếu cần)
     return changeValues;
   };
 
