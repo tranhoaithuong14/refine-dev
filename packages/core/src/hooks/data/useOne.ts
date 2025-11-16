@@ -908,38 +908,359 @@ export const useOne = <
   // ============================================================================
 
   /**
-   * 📖 REACT HOOK - useEffect:
+   * ============================================================================
+   * 🤔 TẠI SAO PHẢI DÙNG useEffect ĐỂ XỬ LÝ NOTIFICATION?
+   * ============================================================================
    *
-   * useEffect này chạy khi query thành công
-   * Hiển thị notification nếu user config
+   * ❓ CÂU HỎI: Tại sao không xử lý notification trực tiếp trong useQuery?
+   *
+   * ❌ CÁCH SAI (không thể làm như này):
+   * ```typescript
+   * const queryResponse = useQuery({...});
+   *
+   * // ❌ SAI - Không thể làm như này!
+   * if (queryResponse.isSuccess) {
+   *   handleNotification(...);  // Code này chạy MỖI LẦN component render!
+   * }
+   * ```
+   *
+   * 🔴 VẤN ĐỀ NẾU KHÔNG DÙNG useEffect:
+   *
+   * 1. CODE CHẠY MỖI LẦN RENDER:
+   *    - Component render rất nhiều lần (khi state thay đổi, props thay đổi,...)
+   *    - Code xử lý notification sẽ chạy mỗi lần render
+   *    - User sẽ thấy notification bị hiện NHIỀU LẦN!
+   *
+   * 2. KHÔNG KIỂM SOÁT ĐƯỢC TIMING:
+   *    - Không biết KHI NÀO nên hiện notification
+   *    - Không biết query đã thành công CHƯA
+   *    - Có thể hiện notification khi query còn đang loading!
+   *
+   * ✅ GIẢI PHÁP: DÙNG useEffect
+   *
+   * useEffect giúp:
+   * - Chỉ chạy code KHI CẦN THIẾT (khi dependencies thay đổi)
+   * - "Theo dõi" (watch) sự thay đổi của query state
+   * - Hiện notification đúng 1 lần khi query thành công
+   *
+   * ============================================================================
+   * 📚 KIẾN THỨC: useEffect HOOK
+   * ============================================================================
+   *
+   * 🎯 CÚ PHÁP:
+   * ```typescript
+   * useEffect(() => {
+   *   // Code trong này gọi là "effect function"
+   *   // Chạy SAU KHI component render xong
+   * }, [dep1, dep2, ...]);
+   *    ^
+   *    |
+   *    Dependencies array (mảng phụ thuộc)
+   * ```
+   *
+   * 🔧 CÁCH HOẠT ĐỘNG:
+   *
+   * 1. Component render lần đầu:
+   *    - React render JSX
+   *    - SAU ĐÓ chạy useEffect
+   *
+   * 2. Dependencies thay đổi:
+   *    - React so sánh giá trị cũ vs mới
+   *    - Nếu KHÁC -> chạy lại useEffect
+   *    - Nếu GIỐNG -> không chạy
+   *
+   * 3. Component unmount (bị xóa):
+   *    - Chạy cleanup function (nếu có)
+   *
+   * 💡 VÍ DỤ ĐƠN GIẢN:
+   * ```typescript
+   * function Counter() {
+   *   const [count, setCount] = useState(0);
+   *
+   *   // useEffect này chạy MỖI KHI count thay đổi
+   *   useEffect(() => {
+   *     console.log("Count changed to:", count);
+   *   }, [count]);
+   *   //  ^
+   *   //  Dependency: count
+   *   //  Khi count thay đổi -> useEffect chạy lại
+   *
+   *   return <button onClick={() => setCount(count + 1)}>{count}</button>;
+   * }
+   * ```
+   *
+   * FLOW:
+   * 1. Render lần đầu: count = 0 -> useEffect chạy -> log "Count changed to: 0"
+   * 2. Click button: count = 1 -> re-render -> useEffect chạy -> log "Count changed to: 1"
+   * 3. Click button: count = 2 -> re-render -> useEffect chạy -> log "Count changed to: 2"
+   *
+   * ============================================================================
+   * 🎬 FLOW HOẠT ĐỘNG TRONG useOne HOOK
+   * ============================================================================
+   *
+   * Hãy xem timeline chi tiết:
+   *
+   * ┌─────────────────────────────────────────────────────────────────────┐
+   * │ T0: Component mount - Render lần đầu                                │
+   * └─────────────────────────────────────────────────────────────────────┘
+   *
+   * 1. useOne hook được gọi
+   * 2. useQuery bắt đầu fetch data
+   * 3. queryResponse = {
+   *      isLoading: true,
+   *      isSuccess: false,  ← FALSE
+   *      isError: false,
+   *      data: undefined
+   *    }
+   * 4. Component render với loading state
+   * 5. useEffect chạy:
+   *    - Check: queryResponse.isSuccess = false
+   *    - Không làm gì cả (vì if condition = false)
+   *
+   * ┌─────────────────────────────────────────────────────────────────────┐
+   * │ T1: Query thành công (sau 2 giây)                                   │
+   * └─────────────────────────────────────────────────────────────────────┘
+   *
+   * 1. API trả về data
+   * 2. React Query cập nhật queryResponse:
+   *    queryResponse = {
+   *      isLoading: false,
+   *      isSuccess: true,   ← CHANGED! (false -> true)
+   *      isError: false,
+   *      data: { data: {...} }  ← CHANGED! (undefined -> {...})
+   *    }
+   * 3. Component re-render (vì queryResponse thay đổi)
+   * 4. useEffect chạy lại (vì dependencies thay đổi):
+   *    - queryResponse.isSuccess đổi từ false -> true ✅
+   *    - queryResponse.data đổi từ undefined -> {...} ✅
+   * 5. useEffect chạy code trong if:
+   *    - Tính toán notificationConfig
+   *    - Gọi handleNotification()
+   *    - User thấy notification "Tải thành công!" 🎉
+   *
+   * ┌─────────────────────────────────────────────────────────────────────┐
+   * │ T2: Component re-render vì lý do khác (vd: props thay đổi)          │
+   * └─────────────────────────────────────────────────────────────────────┘
+   *
+   * 1. Component re-render
+   * 2. queryResponse vẫn giống cũ:
+   *    queryResponse = {
+   *      isSuccess: true,   ← KHÔNG ĐỔI
+   *      data: { data: {...} }  ← KHÔNG ĐỔI
+   *    }
+   * 3. useEffect KHÔNG chạy (vì dependencies không đổi) ✅
+   * 4. Notification KHÔNG bị hiện lại 👍
+   *
+   * ============================================================================
+   * 🔍 PHÂN TÍCH DEPENDENCIES ARRAY
+   * ============================================================================
+   *
+   * Dependencies trong useEffect này:
+   * ```typescript
+   * [
+   *   queryResponse.isSuccess,    // Boolean: false -> true khi query thành công
+   *   queryResponse.data,         // Object: undefined -> {...} khi có data
+   *   successNotification,        // Function/Object từ user
+   * ]
+   * ```
+   *
+   * TẠI SAO CẦN MỖI DEPENDENCY?
+   *
+   * 1. queryResponse.isSuccess:
+   *    - Theo dõi KHI NÀO query thành công
+   *    - Khi đổi từ false -> true -> useEffect chạy
+   *
+   * 2. queryResponse.data:
+   *    - Theo dõi data từ API
+   *    - Nếu refetch và data thay đổi -> có thể hiện notification mới
+   *
+   * 3. successNotification:
+   *    - Nếu user thay đổi config notification
+   *    - useEffect chạy lại để áp dụng config mới
+   *
+   * ❓ ĐIỀU GÌ XẢY RA NẾU BỎ DEPENDENCIES?
+   *
+   * A. Nếu dependencies = []:
+   * ```typescript
+   * useEffect(() => {
+   *   if (queryResponse.isSuccess && queryResponse.data) {
+   *     handleNotification(...);
+   *   }
+   * }, []);  // ❌ SAI - Empty array
+   * ```
+   * - useEffect CHỈ chạy 1 lần khi component mount
+   * - Lúc đó queryResponse.isSuccess = false
+   * - Notification sẽ KHÔNG BAO GIỜ hiện! 🔴
+   *
+   * B. Nếu không có dependencies array:
+   * ```typescript
+   * useEffect(() => {
+   *   if (queryResponse.isSuccess && queryResponse.data) {
+   *     handleNotification(...);
+   *   }
+   * });  // ❌ SAI - No dependencies
+   * ```
+   * - useEffect chạy SAU MỖI LẦN RENDER
+   * - Notification sẽ bị hiện NHIỀU LẦN! 🔴
+   *
+   * ============================================================================
+   * 💡 SO SÁNH VỚI CÁCH KHÁC
+   * ============================================================================
+   *
+   * CÁCH 1: Dùng useEffect (CÁCH HIỆN TẠI) ✅
+   * ```typescript
+   * const queryResponse = useQuery({...});
+   *
+   * useEffect(() => {
+   *   if (queryResponse.isSuccess && queryResponse.data) {
+   *     handleNotification(...);
+   *   }
+   * }, [queryResponse.isSuccess, queryResponse.data]);
+   * ```
+   *
+   * ƯU ĐIỂM:
+   * + Kiểm soát chính xác KHI NÀO notification hiện
+   * + Có thể thêm logic phức tạp
+   * + Dễ debug
+   * + Notification chỉ hiện 1 lần khi query thành công
+   *
+   * NHƯỢC ĐIỂM:
+   * - Code dài hơn chút
+   *
+   * ---
+   *
+   * CÁCH 2: Dùng onSuccess callback trong queryOptions ⚠️
+   * ```typescript
+   * const queryResponse = useQuery({
+   *   queryKey: [...],
+   *   queryFn: async () => {...},
+   *   onSuccess: (data) => {
+   *     handleNotification(...);  // Callback của React Query
+   *   }
+   * });
+   * ```
+   *
+   * ƯU ĐIỂM:
+   * + Code ngắn gọn
+   * + Built-in feature của React Query
+   *
+   * NHƯỢC ĐIỂM:
+   * - onSuccess có thể bị deprecated trong tương lai (React Query v5 khuyến khích dùng useEffect)
+   * - Khó access các biến bên ngoài
+   * - Callback chạy TRƯỚC khi component re-render (có thể gây issue)
+   *
+   * LÝ DO REFINE CHỌN CÁCH 1:
+   * - Refine muốn kiểm soát tốt hơn
+   * - Có logic phức tạp (check successNotification là function hay object)
+   * - Tương thích tốt với tất cả versions của React Query
+   * - Dễ maintain và debug
+   *
+   * ============================================================================
+   * 📖 CODE THỰC TẾ DƯỚI ĐÂY
+   * ============================================================================
+   */
+
+  /**
+   * 🎯 useEffect #1: Xử lý SUCCESS notification
+   *
+   * CHỨC NĂNG:
+   * - Theo dõi khi query thành công
+   * - Hiện notification success nếu user config
+   *
+   * KHI NÀO CHẠY:
+   * - Khi queryResponse.isSuccess đổi từ false -> true
+   * - Khi queryResponse.data thay đổi (refetch)
+   * - Khi successNotification config thay đổi
+   *
+   * FLOW:
+   * 1. Check if query thành công (isSuccess = true và có data)
+   * 2. Tính toán notification config:
+   *    - Nếu successNotification là function -> gọi function
+   *    - Nếu là object -> dùng trực tiếp
+   *    - Nếu là false -> không hiện notification
+   * 3. Gọi handleNotification để hiện notification
    */
   useEffect(() => {
+    // ========================================================================
+    // STEP 1: Kiểm tra điều kiện
+    // ========================================================================
+    //
+    // Chỉ chạy khi:
+    // - queryResponse.isSuccess = true (query đã thành công)
+    // - queryResponse.data có giá trị (có data từ API)
+    //
     if (queryResponse.isSuccess && queryResponse.data) {
-      // Tính toán notification config
+      // ======================================================================
+      // STEP 2: Tính toán notification config
+      // ======================================================================
+      //
       // successNotification có thể là:
-      // - Object: { message: "...", description: "..." }
-      // - Function: (data, params, identifier) => ({ ... })
-      // - false: không hiện notification
+      //
+      // 1. Object:
+      //    { message: "Tải thành công!", description: "..." }
+      //
+      // 2. Function:
+      //    (data, params, identifier) => ({
+      //      message: `Đã tải ${data.data.title}`,
+      //      description: "..."
+      //    })
+      //
+      // 3. false:
+      //    Không hiện notification
+      //
       const notificationConfig =
         typeof successNotification === "function"
-          ? successNotification(
-              queryResponse.data,
+          ? // Nếu là function -> gọi function với data, params, identifier
+            successNotification(
+              queryResponse.data, // Data từ API
               {
-                id,
-                ...combinedMeta,
+                id, // ID của record
+                ...combinedMeta, // Metadata
               },
-              identifier,
+              identifier, // Resource identifier
             )
-          : successNotification;
+          : // Nếu không phải function -> dùng trực tiếp (object hoặc false)
+            successNotification;
 
-      // Hiển thị notification
+      // ======================================================================
+      // STEP 3: Hiển thị notification
+      // ======================================================================
+      //
+      // handleNotification sẽ:
+      // - Nếu notificationConfig = false -> không hiện gì
+      // - Nếu notificationConfig = object -> hiện notification
+      //
       handleNotification(notificationConfig);
     }
   }, [
-    // Dependencies: chỉ chạy lại khi các giá trị này thay đổi
+    // ==========================================================================
+    // DEPENDENCIES ARRAY - Mảng phụ thuộc
+    // ==========================================================================
+    //
+    // useEffect chỉ chạy lại KHI một trong các giá trị này THAY ĐỔI:
+    //
+
+    // 1. queryResponse.isSuccess
+    //    - false khi đang loading
+    //    - true khi query thành công
+    //    - Khi đổi false -> true -> useEffect chạy -> hiện notification
     queryResponse.isSuccess,
+
+    // 2. queryResponse.data
+    //    - undefined khi đang loading
+    //    - {...} khi có data
+    //    - Nếu refetch và data thay đổi -> useEffect chạy lại
     queryResponse.data,
+
+    // 3. successNotification
+    //    - Config từ user
+    //    - Nếu user đổi config -> useEffect chạy lại với config mới
     successNotification,
+
+    // NOTE: Không cần thêm handleNotification, id, combinedMeta, identifier
+    // vào dependencies vì:
+    // - handleNotification là stable function (không đổi)
+    // - id, combinedMeta, identifier đã được track qua successNotification
   ]);
 
   // ============================================================================
@@ -947,46 +1268,211 @@ export const useOne = <
   // ============================================================================
 
   /**
-   * 📖 ERROR HANDLING:
+   * 🎯 useEffect #2: Xử lý ERROR notification
    *
-   * useEffect này chạy khi query bị lỗi
-   * Hiển thị error notification
+   * ============================================================================
+   * ❓ TẠI SAO CẦN useEffect THỨ 2?
+   * ============================================================================
+   *
+   * CÂU HỎI: Tại sao không gộp chung với useEffect success ở trên?
+   *
+   * TRẢ LỜI: Vì SUCCESS và ERROR có DEPENDENCIES KHÁC NHAU!
+   *
+   * - Success useEffect theo dõi: isSuccess, data, successNotification
+   * - Error useEffect theo dõi: isError, error.message, errorNotification
+   *
+   * Nếu gộp chung:
+   * - Dependencies sẽ dài và khó quản lý
+   * - Khó debug (không biết useEffect chạy vì success hay error)
+   * - Performance kém hơn (useEffect chạy khi không cần thiết)
+   *
+   * ============================================================================
+   * 🎬 FLOW HOẠT ĐỘNG KHI CÓ LỖI
+   * ============================================================================
+   *
+   * ┌─────────────────────────────────────────────────────────────────────┐
+   * │ T0: Component mount - Render lần đầu                                │
+   * └─────────────────────────────────────────────────────────────────────┘
+   *
+   * 1. useOne hook được gọi
+   * 2. useQuery bắt đầu fetch data
+   * 3. queryResponse = {
+   *      isLoading: true,
+   *      isSuccess: false,
+   *      isError: false,  ← FALSE
+   *      error: null
+   *    }
+   * 4. Component render với loading state
+   * 5. useEffect #2 chạy:
+   *    - Check: queryResponse.isError = false
+   *    - Không làm gì cả
+   *
+   * ┌─────────────────────────────────────────────────────────────────────┐
+   * │ T1: Query bị lỗi (sau 2 giây)                                       │
+   * └─────────────────────────────────────────────────────────────────────┘
+   *
+   * 1. API trả về lỗi (VD: 404 Not Found)
+   * 2. React Query cập nhật queryResponse:
+   *    queryResponse = {
+   *      isLoading: false,
+   *      isSuccess: false,
+   *      isError: true,  ← CHANGED! (false -> true)
+   *      error: {  ← CHANGED! (null -> {...})
+   *        message: "Not Found",
+   *        statusCode: 404
+   *      }
+   *    }
+   * 3. Component re-render (vì queryResponse thay đổi)
+   * 4. useEffect #2 chạy lại (vì dependencies thay đổi):
+   *    - queryResponse.isError đổi từ false -> true ✅
+   *    - queryResponse.error.message đổi từ null -> "Not Found" ✅
+   * 5. useEffect chạy code trong if:
+   *    - Gọi checkError (có thể logout, redirect,...)
+   *    - Tính toán error notificationConfig
+   *    - Gọi handleNotification
+   *    - User thấy error notification "Lỗi: Not Found" 🔴
+   *
+   * ============================================================================
+   * CHỨC NĂNG:
+   * ============================================================================
+   *
+   * - Theo dõi khi query bị lỗi
+   * - Xử lý error (logout nếu 401, redirect nếu 403,...)
+   * - Hiện error notification
+   *
+   * KHI NÀO CHẠY:
+   * - Khi queryResponse.isError đổi từ false -> true
+   * - Khi queryResponse.error.message thay đổi
+   *
+   * FLOW:
+   * 1. Check if query bị lỗi (isError = true và có error)
+   * 2. Gọi checkError để xử lý error
+   * 3. Tính toán error notification config
+   * 4. Hiện error notification với fallback message
    */
   useEffect(() => {
+    // ========================================================================
+    // STEP 1: Kiểm tra điều kiện
+    // ========================================================================
+    //
+    // Chỉ chạy khi:
+    // - queryResponse.isError = true (query bị lỗi)
+    // - queryResponse.error có giá trị (có error object)
+    //
     if (queryResponse.isError && queryResponse.error) {
-      // Gọi hàm checkError để xử lý error
-      // (VD: logout nếu 401, redirect nếu 403,...)
+      // ======================================================================
+      // STEP 2: Xử lý error (checkError)
+      // ======================================================================
+      //
+      // checkError là hàm từ useOnError hook
+      // Xử lý các error đặc biệt:
+      //
+      // - 401 Unauthorized -> Logout user, redirect to login
+      // - 403 Forbidden -> Show "Bạn không có quyền" message
+      // - 404 Not Found -> (thường chỉ hiện notification)
+      // - 500 Server Error -> (thường chỉ hiện notification)
+      //
+      // VÍ DỤ:
+      // if (error.statusCode === 401) {
+      //   localStorage.removeItem("token");
+      //   window.location.href = "/login";
+      // }
+      //
       checkError(queryResponse.error);
 
-      // Tính toán error notification config
+      // ======================================================================
+      // STEP 3: Tính toán error notification config
+      // ======================================================================
+      //
+      // errorNotification có thể là:
+      //
+      // 1. Object:
+      //    { message: "Lỗi!", description: "Không tìm thấy dữ liệu" }
+      //
+      // 2. Function:
+      //    (error, params, identifier) => ({
+      //      message: `Lỗi ${error.statusCode}`,
+      //      description: error.message
+      //    })
+      //
+      // 3. false:
+      //    Không hiện notification (silent error)
+      //
       const notificationConfig =
         typeof errorNotification === "function"
-          ? errorNotification(
-              queryResponse.error,
+          ? // Nếu là function -> gọi function với error, params, identifier
+            errorNotification(
+              queryResponse.error, // Error object từ API
               {
-                id,
-                ...combinedMeta,
+                id, // ID của record
+                ...combinedMeta, // Metadata
               },
-              identifier,
+              identifier, // Resource identifier
             )
-          : errorNotification;
+          : // Nếu không phải function -> dùng trực tiếp (object hoặc false)
+            errorNotification;
 
-      // Hiển thị error notification với fallback message
+      // ======================================================================
+      // STEP 4: Hiển thị error notification
+      // ======================================================================
+      //
+      // handleNotification nhận 2 params:
+      //
+      // 1. notificationConfig: Config từ user (có thể false)
+      // 2. fallback: Default notification nếu user không config
+      //
+      // LOGIC:
+      // - Nếu notificationConfig = false -> không hiện gì
+      // - Nếu notificationConfig = object -> dùng config đó
+      // - Nếu notificationConfig = undefined -> dùng fallback
+      //
+      // VÍ DỤ FALLBACK:
+      // {
+      //   key: "1-posts-getOne-notification",  // Unique key (tránh duplicate)
+      //   message: "Lỗi (status code: 404)",   // Translated message
+      //   description: "Not Found",             // Error message từ API
+      //   type: "error"                         // Type: success/error/warning/info
+      // }
+      //
       handleNotification(notificationConfig, {
-        key: `${id}-${identifier}-getOne-notification`,
+        key: `${id}-${identifier}-getOne-notification`, // Unique key
         message: translate(
-          "notifications.error",
-          { statusCode: queryResponse.error.statusCode },
-          `Error (status code: ${queryResponse.error.statusCode})`,
+          "notifications.error", // i18n key
+          { statusCode: queryResponse.error.statusCode }, // Params
+          `Error (status code: ${queryResponse.error.statusCode})`, // Fallback
         ),
-        description: queryResponse.error.message,
-        type: "error",
+        description: queryResponse.error.message, // Error message
+        type: "error", // Notification type
       });
     }
   }, [
-    // Dependencies
+    // ==========================================================================
+    // DEPENDENCIES ARRAY - Mảng phụ thuộc
+    // ==========================================================================
+    //
+    // useEffect chỉ chạy lại KHI một trong các giá trị này THAY ĐỔI:
+    //
+
+    // 1. queryResponse.isError
+    //    - false khi đang loading hoặc thành công
+    //    - true khi query bị lỗi
+    //    - Khi đổi false -> true -> useEffect chạy -> hiện error notification
     queryResponse.isError,
+
+    // 2. queryResponse.error?.message
+    //    - undefined khi không có lỗi
+    //    - "Not Found", "Server Error",... khi có lỗi
+    //    - Nếu retry và error message thay đổi -> useEffect chạy lại
+    //
+    // NOTE: Dùng optional chaining (?.) vì error có thể null
     queryResponse.error?.message,
+
+    // NOTE: Không cần thêm errorNotification vào dependencies
+    // Vì đã được bao gồm qua isError và error.message
+    // (Error notification chỉ hiện khi có error)
+    //
+    // NOTE: Không cần thêm checkError, handleNotification, translate,...
+    // Vì đây là stable functions (không đổi)
   ]);
 
   // ============================================================================
