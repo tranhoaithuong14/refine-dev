@@ -156,10 +156,20 @@ export const useForm = <
   // Syntax "{ redirect: defaultRedirect }" nghĩa là lấy field "redirect" và đổi tên thành "defaultRedirect"
   const { redirect: defaultRedirect } = useRefineOptions();
 
-  // Lấy mutation mode mặc định (pessimistic/optimistic/undoable)
-  // - pessimistic: Đợi server phản hồi mới cập nhật UI
-  // - optimistic: Cập nhật UI ngay, rollback nếu server báo lỗi
-  // - undoable: Cập nhật UI ngay, cho phép undo trong vài giây
+  /**
+   * 🧠 useMutationMode - Hook lấy "chiến lược" cập nhật dữ liệu mặc định cho toàn app
+   *
+   * React Query/Refine hỗ trợ 3 mutation mode chính:
+   * - pessimistic: UI đợi server phản hồi rồi mới cập nhật (an toàn, nhưng chậm cảm giác)
+   * - optimistic: UI cập nhật ngay lập tức, nếu server lỗi thì rollback lại (trải nghiệm tốt hơn, cần cẩn thận xử lý lỗi)
+   * - undoable: UI cập nhật ngay, nhưng cho phép user undo trong một khoảng thời gian ngắn
+   *
+   * useMutationMode trả về một object { mutationMode } lấy từ context Refine (cấu hình global).
+   * Ở đây dùng destructuring với alias:
+   *   const { mutationMode: defaultMutationMode } = useMutationMode();
+   * - "mutationMode: defaultMutationMode" nghĩa là lấy field mutationMode và đổi tên thành defaultMutationMode
+   *   để phân biệt với mutationMode của riêng form (có thể được truyền qua props).
+   */
   const { mutationMode: defaultMutationMode } = useMutationMode();
 
   // Lấy hàm để bật/tắt cảnh báo khi user rời trang mà chưa lưu thay đổi
