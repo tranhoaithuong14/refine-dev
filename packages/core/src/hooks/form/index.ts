@@ -152,8 +152,18 @@ export const useForm = <
   // Lấy hàm để invalidate (làm mới) cache - xóa dữ liệu cũ để fetch lại từ server
   const invalidate = useInvalidate();
 
-  // Destructuring (tách) object để lấy giá trị redirect mặc định từ cấu hình
-  // Syntax "{ redirect: defaultRedirect }" nghĩa là lấy field "redirect" và đổi tên thành "defaultRedirect"
+  /**
+   * 🛠 useRefineOptions - Hook đọc cấu hình toàn cục của RefineProvider
+   *
+   * Ví dụ các option trong Refine:
+   * - redirect: hành vi chuyển trang sau khi tạo/sửa (VD: "show" | "list" | false)
+   * - mutationMode: chiến lược mutation mặc định (đã giải thích phía dưới)
+   * - syncWithLocation, warnWhenUnsavedChanges, v.v.
+   *
+   * Ở đây chỉ cần lấy field redirect, nên destructuring kèm alias:
+   *   { redirect: defaultRedirect } = useRefineOptions();
+   * - Lấy redirect từ context, đổi tên thành defaultRedirect để phân biệt với props.redirect.
+   */
   const { redirect: defaultRedirect } = useRefineOptions();
 
   /**
@@ -172,10 +182,33 @@ export const useForm = <
    */
   const { mutationMode: defaultMutationMode } = useMutationMode();
 
-  // Lấy hàm để bật/tắt cảnh báo khi user rời trang mà chưa lưu thay đổi
+  /**
+   * ⏱ useLoadingOvertime - Hook theo dõi "loading quá lâu"
+   *
+   * Nó trả về state/isLoadingOvertime và các hàm start/stop để:
+   * - Bật cờ sau X ms nếu API chưa xong (tránh spinner quá ngắn hoặc quá dài mà không báo)
+   * - Dùng để hiển thị skeleton/overlay đặc biệt khi chờ lâu.
+   * Ở đây ta chỉ cần hàm và state (lấy ở phần dưới khi khởi tạo).
+   */
+  const loadingOvertimeContext = useLoadingOvertime(props);
+
+  /**
+   * ⚠️ useWarnAboutChange - Hook bật/tắt cảnh báo nếu rời trang khi chưa lưu
+   *
+   * Trả về hàm setWarnWhen(bool):
+   * - true: nếu user có thay đổi chưa submit, sẽ cảnh báo trước khi rời trang.
+   * - false: tắt cảnh báo (sau khi đã lưu).
+   */
   const { setWarnWhen } = useWarnAboutChange();
 
-  // Lấy hàm xử lý redirect sau khi submit form thành công
+  /**
+   * 🔀 useRedirectionAfterSubmission - Hook xử lý chuyển hướng sau khi submit thành công
+   *
+   * Trả về hàm handleSubmitWithRedirect(action?, redirectTo?):
+   * - action: create/edit/clone (ảnh hưởng route đích)
+   * - redirectTo: override đích đến (VD: "show", "list", false)
+   * Kết hợp với defaultRedirect bên trên để quyết định đường đi sau submit.
+   */
   const handleSubmitWithRedirect = useRedirectionAfterSubmission();
 
   // Lấy metadata từ props (nếu user truyền vào)
