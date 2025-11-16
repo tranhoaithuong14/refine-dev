@@ -103,20 +103,487 @@ export type UseOneProps<TQueryFnData, TError, TData> = {
   id?: BaseKey;
 
   /**
-   * 📖 OPTIONS CHO REACT QUERY:
+   * ⚙️ OPTIONS CHO REACT QUERY - TÙY CHỈNH BEHAVIOR CỦA QUERY
    *
-   * queryOptions cho phép bạn tùy chỉnh behavior của useQuery
-   * VD:
-   * - enabled: bật/tắt query
-   * - refetchOnWindowFocus: refetch khi user quay lại tab
-   * - staleTime: thời gian dữ liệu được coi là "fresh"
-   * - cacheTime: thời gian giữ cache
-   * - retry: số lần retry khi lỗi
-   * - onSuccess/onError: callbacks
-   * - select: transform data trước khi trả về
-   * - ...và nhiều options khác
+   * ============================================================================
+   * 📚 GIỚI THIỆU:
+   * ============================================================================
    *
-   * Xem: https://tanstack.com/query/v5/docs/framework/react/reference/useQuery
+   * queryOptions cho phép bạn tùy chỉnh cách useQuery hoạt động.
+   * Đây là một object chứa rất nhiều options để control:
+   * - Khi nào query chạy
+   * - Bao lâu data được cache
+   * - Có tự động refetch không
+   * - Xử lý errors như thế nào
+   * - Transform data trước khi trả về
+   * - ...và nhiều hơn nữa!
+   *
+   * ============================================================================
+   * 🎯 CÁC OPTIONS PHỔ BIẾN:
+   * ============================================================================
+   *
+   * 1. enabled: boolean
+   *    - true: Query sẽ chạy tự động
+   *    - false: Query bị tắt (không fetch)
+   *    VD: enabled: !!id  // Chỉ fetch khi có id
+   *
+   * 2. refetchOnWindowFocus: boolean
+   *    - true: Tự động refetch khi user quay lại tab/window
+   *    - false: Không refetch
+   *    VD: refetchOnWindowFocus: false
+   *
+   * 3. staleTime: number (milliseconds)
+   *    - Thời gian data được coi là "fresh" (mới)
+   *    - Trong thời gian này, không refetch
+   *    VD: staleTime: 5 * 60 * 1000  // 5 phút
+   *
+   * 4. cacheTime: number (milliseconds)
+   *    - Thời gian giữ data trong cache sau khi không dùng nữa
+   *    VD: cacheTime: 10 * 60 * 1000  // 10 phút
+   *
+   * 5. retry: number | boolean
+   *    - Số lần retry khi request bị lỗi
+   *    VD: retry: 3  // Retry 3 lần
+   *
+   * 6. retryDelay: number | (retryCount) => number
+   *    - Delay giữa các lần retry
+   *    VD: retryDelay: 1000  // Chờ 1 giây
+   *
+   * 7. select: (data) => transformedData
+   *    - Transform/filter data trước khi trả về component
+   *    VD: select: (data) => data.data.title  // Chỉ lấy title
+   *
+   * 8. onSuccess: (data) => void
+   *    - Callback chạy khi query thành công
+   *    VD: onSuccess: (data) => console.log("Success!", data)
+   *
+   * 9. onError: (error) => void
+   *    - Callback chạy khi query bị lỗi
+   *    VD: onError: (error) => alert("Lỗi: " + error.message)
+   *
+   * 10. onSettled: (data, error) => void
+   *     - Callback luôn chạy (dù success hay error)
+   *     VD: onSettled: () => console.log("Query đã xong!")
+   *
+   * 11. refetchInterval: number | false
+   *     - Tự động refetch theo interval (polling)
+   *     VD: refetchInterval: 5000  // Refetch mỗi 5 giây
+   *
+   * 12. keepPreviousData: boolean
+   *     - Giữ data cũ khi đang fetch data mới
+   *     - Tránh UI bị "nhảy" khi refetch
+   *     VD: keepPreviousData: true
+   *
+   * 📖 Xem thêm: https://tanstack.com/query/v5/docs/framework/react/reference/useQuery
+   *
+   * ============================================================================
+   * 💡 VÍ DỤ SỬ DỤNG:
+   * ============================================================================
+   *
+   * ```typescript
+   * const { query, result } = useOne({
+   *   resource: "posts",
+   *   id: 1,
+   *   queryOptions: {
+   *     // Chỉ fetch khi có id
+   *     enabled: !!id,
+   *
+   *     // Data "fresh" trong 5 phút
+   *     staleTime: 5 * 60 * 1000,
+   *
+   *     // Không refetch khi focus window
+   *     refetchOnWindowFocus: false,
+   *
+   *     // Retry 3 lần nếu lỗi
+   *     retry: 3,
+   *
+   *     // Chỉ lấy title từ response
+   *     select: (data) => ({
+   *       data: {
+   *         title: data.data.title
+   *       }
+   *     }),
+   *
+   *     // Log khi thành công
+   *     onSuccess: (data) => {
+   *       console.log("Đã tải xong:", data);
+   *     },
+   *
+   *     // Alert khi lỗi
+   *     onError: (error) => {
+   *       alert("Có lỗi xảy ra!");
+   *     }
+   *   }
+   * });
+   * ```
+   *
+   * ============================================================================
+   * 🔧 TYPESCRIPT - PHÂN TÍCH TYPE DEFINITION (PHẦN QUAN TRỌNG!)
+   * ============================================================================
+   */
+
+  /**
+   * 📖 TYPESCRIPT - CHI TIẾT TYPE CỦA queryOptions:
+   *
+   * Đây là một type definition phức tạp, hãy phân tích từng phần!
+   *
+   * ┌─────────────────────────────────────────────────────────────────────┐
+   * │ BƯỚC 1: HIỂU CẤU TRÚC TỔNG QUÁT                                     │
+   * └─────────────────────────────────────────────────────────────────────┘
+   *
+   * queryOptions có cấu trúc:
+   *
+   *   queryOptions?: PHẦN_A & PHẦN_B
+   *                    ^        ^
+   *                    |        |
+   *           Omit<...>   Intersection  {...}
+   *           (loại bỏ)      Type (&)   (thêm lại)
+   *
+   * - Dấu ? nghĩa là OPTIONAL (có thể có hoặc không)
+   * - PHẦN_A: Lấy tất cả options từ UseQueryOptions, NHƯNG loại bỏ queryKey và queryFn
+   * - Dấu & là INTERSECTION TYPE (gộp 2 types lại)
+   * - PHẦN_B: Thêm lại queryKey và queryFn (nhưng là OPTIONAL)
+   *
+   * ┌─────────────────────────────────────────────────────────────────────┐
+   * │ BƯỚC 2: HIỂU "Omit<...>" - UTILITY TYPE                            │
+   * └─────────────────────────────────────────────────────────────────────┘
+   *
+   * 📚 OMIT UTILITY TYPE:
+   *
+   * Omit<Type, Keys> nghĩa là "lấy Type nhưng BỎ ĐI các keys được chỉ định"
+   *
+   * VÍ DỤ ĐƠN GIẢN:
+   * ```typescript
+   * type Person = {
+   *   name: string;
+   *   age: number;
+   *   email: string;
+   * };
+   *
+   * // Lấy Person nhưng bỏ đi email
+   * type PersonWithoutEmail = Omit<Person, "email">;
+   * // Kết quả:
+   * // {
+   * //   name: string;
+   * //   age: number;
+   * // }
+   *
+   * // Có thể bỏ nhiều keys:
+   * type OnlyName = Omit<Person, "age" | "email">;
+   * // Kết quả:
+   * // {
+   * //   name: string;
+   * // }
+   * ```
+   *
+   * TRONG CODE NÀY:
+   * ```typescript
+   * Omit<
+   *   UseQueryOptions<...>,
+   *   "queryKey" | "queryFn"
+   * >
+   * ```
+   * Nghĩa là: Lấy TẤT CẢ options từ UseQueryOptions, NHƯNG loại bỏ:
+   * - queryKey
+   * - queryFn
+   *
+   * TẠI SAO LẠI BỎ? 🤔
+   * Vì useOne hook đã tự động tạo queryKey và queryFn cho bạn rồi!
+   * Bạn không cần (và không nên) tự định nghĩa chúng trong hầu hết trường hợp.
+   *
+   * ┌─────────────────────────────────────────────────────────────────────┐
+   * │ BƯỚC 3: HIỂU "UseQueryOptions<...>" - GENERIC TYPE                 │
+   * └─────────────────────────────────────────────────────────────────────┘
+   *
+   * 📚 GENERIC TYPE PARAMETERS:
+   *
+   * UseQueryOptions nhận 3 generic parameters:
+   * ```typescript
+   * UseQueryOptions<TQueryFnData, TError, TData>
+   *                     ^           ^       ^
+   *                     |           |       |
+   *                     |           |       Data sau khi transform (select)
+   *                     |           |
+   *                     |           Error type
+   *                     |
+   *                     Data thô từ API
+   * ```
+   *
+   * TRONG CODE NÀY:
+   * ```typescript
+   * UseQueryOptions<
+   *   GetOneResponse<TQueryFnData>,  // Data thô từ API
+   *   TError,                         // Error type
+   *   GetOneResponse<TData>           // Data sau transform
+   * >
+   * ```
+   *
+   * GIẢI THÍCH CỤ THỂ:
+   *
+   * 1. TQueryFnData:
+   *    - Dữ liệu GỐC từ API (chưa transform)
+   *    - VD: { data: { id: 1, title: "Hello" } }
+   *
+   * 2. TError:
+   *    - Kiểu lỗi có thể xảy ra
+   *    - VD: HttpError (có statusCode, message,...)
+   *
+   * 3. TData:
+   *    - Dữ liệu SAU KHI transform bởi select function
+   *    - VD: Nếu select: (data) => data.data.title
+   *         Thì TData = string
+   *
+   * 4. GetOneResponse<T>:
+   *    - Wrapper type cho response từ getOne API
+   *    - Cấu trúc: { data: T }
+   *    - VD: GetOneResponse<Post> = { data: Post }
+   *
+   * ┌─────────────────────────────────────────────────────────────────────┐
+   * │ BƯỚC 4: HIỂU INTERSECTION TYPE (&)                                  │
+   * └─────────────────────────────────────────────────────────────────────┘
+   *
+   * 📚 INTERSECTION TYPE (&):
+   *
+   * Type A & Type B nghĩa là "GỘP tất cả properties của A VÀ B"
+   *
+   * VÍ DỤ ĐƠN GIẢN:
+   * ```typescript
+   * type Person = {
+   *   name: string;
+   *   age: number;
+   * };
+   *
+   * type Employee = {
+   *   company: string;
+   *   salary: number;
+   * };
+   *
+   * // Gộp Person và Employee
+   * type EmployeePerson = Person & Employee;
+   * // Kết quả:
+   * // {
+   * //   name: string;
+   * //   age: number;
+   * //   company: string;
+   * //   salary: number;
+   * // }
+   * ```
+   *
+   * TRONG CODE NÀY:
+   * ```typescript
+   * Omit<UseQueryOptions<...>, "queryKey" | "queryFn"> & { queryKey?: ..., queryFn?: ... }
+   *                    ^                                  ^
+   *                    |                                  |
+   *                  PHẦN A                             PHẦN B
+   *                (tất cả options                  (queryKey và queryFn
+   *                 trừ queryKey,                    nhưng OPTIONAL)
+   *                 queryFn)
+   * ```
+   *
+   * KẾT QUẢ SAU KHI GỘP:
+   * - enabled? (từ PHẦN A)
+   * - staleTime? (từ PHẦN A)
+   * - retry? (từ PHẦN A)
+   * - onSuccess? (từ PHẦN A)
+   * - ...tất cả options khác (từ PHẦN A)
+   * - queryKey? (từ PHẦN B - OPTIONAL)
+   * - queryFn? (từ PHẦN B - OPTIONAL)
+   *
+   * ┌─────────────────────────────────────────────────────────────────────┐
+   * │ BƯỚC 5: HIỂU INDEXED ACCESS TYPE (["queryKey"])                     │
+   * └─────────────────────────────────────────────────────────────────────┘
+   *
+   * 📚 INDEXED ACCESS TYPE:
+   *
+   * Type["key"] nghĩa là "LẤY type của property 'key' từ Type"
+   *
+   * VÍ DỤ ĐƠN GIẢN:
+   * ```typescript
+   * type Person = {
+   *   name: string;
+   *   age: number;
+   *   address: {
+   *     city: string;
+   *     street: string;
+   *   };
+   * };
+   *
+   * type NameType = Person["name"];
+   * // Kết quả: string
+   *
+   * type AgeType = Person["age"];
+   * // Kết quả: number
+   *
+   * type AddressType = Person["address"];
+   * // Kết quả: { city: string; street: string; }
+   * ```
+   *
+   * TRONG CODE NÀY:
+   * ```typescript
+   * queryKey?: UseQueryOptions<...>["queryKey"];
+   * ```
+   * Nghĩa là:
+   * - Lấy TYPE của property "queryKey" từ UseQueryOptions
+   * - Gán nó cho property "queryKey" của object này
+   * - Thêm dấu ? để làm nó OPTIONAL
+   *
+   * TẠI SAO LÀM VẬY? 🤔
+   * Để đảm bảo type của queryKey CHÍNH XÁC giống với type trong UseQueryOptions!
+   * Nếu React Query thay đổi type của queryKey trong tương lai, code này vẫn đúng.
+   *
+   * ┌─────────────────────────────────────────────────────────────────────┐
+   * │ BƯỚC 6: TẠI SAO CẦN CẤU TRÚC PHỨC TẠP NÀY? 🤔                      │
+   * └─────────────────────────────────────────────────────────────────────┘
+   *
+   * ❓ CÂU HỎI: Tại sao không đơn giản là:
+   * ```typescript
+   * queryOptions?: UseQueryOptions<...>
+   * ```
+   *
+   * ✅ TRẢ LỜI:
+   *
+   * Vì useOne hook đã TỰ ĐỘNG tạo queryKey và queryFn!
+   *
+   * 1. DEFAULT BEHAVIOR (không truyền queryOptions):
+   *    ```typescript
+   *    const { query, result } = useOne({
+   *      resource: "posts",
+   *      id: 1
+   *    });
+   *    // Hook tự động tạo:
+   *    // queryKey: ['data', 'default', 'posts', 'one', '1', {}]
+   *    // queryFn: () => dataProvider.getOne({ resource: "posts", id: 1 })
+   *    ```
+   *
+   * 2. OVERRIDE MỘT PHẦN (truyền queryOptions):
+   *    ```typescript
+   *    const { query, result } = useOne({
+   *      resource: "posts",
+   *      id: 1,
+   *      queryOptions: {
+   *        staleTime: 5000,  // ✅ OK - Thêm staleTime
+   *        enabled: !!id,    // ✅ OK - Thêm enabled
+   *      }
+   *    });
+   *    // Hook vẫn tự tạo queryKey và queryFn, chỉ thêm staleTime và enabled
+   *    ```
+   *
+   * 3. ADVANCED - OVERRIDE CẢ queryKey và queryFn (hiếm khi cần):
+   *    ```typescript
+   *    const { query, result } = useOne({
+   *      resource: "posts",
+   *      id: 1,
+   *      queryOptions: {
+   *        queryKey: ['custom', 'key'],  // ✅ OK - Override queryKey (nếu cần)
+   *        queryFn: async () => {        // ✅ OK - Override queryFn (nếu cần)
+   *          // Custom logic
+   *          return customAPI.getData();
+   *        }
+   *      }
+   *    });
+   *    ```
+   *
+   * NẾU KHÔNG DÙNG Omit:
+   * - TypeScript sẽ BẮT BUỘC phải truyền queryKey và queryFn (vì chúng required trong UseQueryOptions)
+   * - User sẽ phải viết lại queryKey và queryFn mỗi lần dùng useOne
+   * - Mất đi sự tiện lợi của hook!
+   *
+   * VỚI Omit:
+   * - queryKey và queryFn trở thành OPTIONAL
+   * - User chỉ cần truyền khi thực sự muốn override
+   * - 99% trường hợp chỉ cần truyền enabled, staleTime, retry,...
+   *
+   * ┌─────────────────────────────────────────────────────────────────────┐
+   * │ BƯỚC 7: TÓM TẮT - ĐỌC TYPE NÀY NHƯ THẾ NÀO?                        │
+   * └─────────────────────────────────────────────────────────────────────┘
+   *
+   * ```typescript
+   * queryOptions?: Omit<UseQueryOptions<...>, "queryKey" | "queryFn"> & {...}
+   * ```
+   *
+   * ĐỌC THÀNH TIẾNG VIỆT:
+   *
+   * "queryOptions là một property OPTIONAL (?), với type là:
+   *  - Lấy TẤT CẢ properties từ UseQueryOptions
+   *  - NHƯNG loại bỏ (Omit) queryKey và queryFn
+   *  - SAU ĐÓ gộp (&) với một object mới
+   *  - Object mới này chứa queryKey và queryFn, nhưng cả 2 đều OPTIONAL"
+   *
+   * ┌─────────────────────────────────────────────────────────────────────┐
+   * │ BƯỚC 8: VÍ DỤ THỰC TẾ - TYPE CHECKING                              │
+   * └─────────────────────────────────────────────────────────────────────┘
+   *
+   * ```typescript
+   * // ✅ ĐÚNG - Không truyền gì cả
+   * useOne({ resource: "posts", id: 1 });
+   *
+   * // ✅ ĐÚNG - Truyền staleTime
+   * useOne({
+   *   resource: "posts",
+   *   id: 1,
+   *   queryOptions: { staleTime: 5000 }
+   * });
+   *
+   * // ✅ ĐÚNG - Truyền enabled
+   * useOne({
+   *   resource: "posts",
+   *   id: 1,
+   *   queryOptions: { enabled: !!id }
+   * });
+   *
+   * // ✅ ĐÚNG - Override queryKey (advanced)
+   * useOne({
+   *   resource: "posts",
+   *   id: 1,
+   *   queryOptions: {
+   *     queryKey: ['my', 'custom', 'key']
+   *   }
+   * });
+   *
+   * // ❌ SAI - Truyền property không tồn tại
+   * useOne({
+   *   resource: "posts",
+   *   id: 1,
+   *   queryOptions: { unknownProp: 123 }  // Error: unknownProp không tồn tại!
+   * });
+   *
+   * // ❌ SAI - Type không đúng
+   * useOne({
+   *   resource: "posts",
+   *   id: 1,
+   *   queryOptions: { enabled: "yes" }  // Error: enabled phải là boolean!
+   * });
+   * ```
+   *
+   * ┌─────────────────────────────────────────────────────────────────────┐
+   * │ 🎓 TỔNG KẾT - KIẾN THỨC TYPESCRIPT ĐÃ HỌC:                         │
+   * └─────────────────────────────────────────────────────────────────────┘
+   *
+   * 1. ✅ Optional Properties (?):
+   *    - Thêm ? sau tên property để làm nó optional
+   *    - VD: name?: string
+   *
+   * 2. ✅ Omit<Type, Keys>:
+   *    - Utility type để loại bỏ properties khỏi một type
+   *    - VD: Omit<Person, "age">
+   *
+   * 3. ✅ Intersection Type (A & B):
+   *    - Gộp tất cả properties của 2 types
+   *    - VD: Person & Employee
+   *
+   * 4. ✅ Generic Types:
+   *    - Type nhận tham số (type parameters)
+   *    - VD: UseQueryOptions<TData, TError>
+   *
+   * 5. ✅ Indexed Access Type:
+   *    - Lấy type của một property từ type khác
+   *    - VD: Person["name"] -> string
+   *
+   * 6. ✅ Type Composition:
+   *    - Kết hợp nhiều techniques để tạo type phức tạp
+   *    - VD: Omit<...> & {...}
+   *
+   * 👏 Chúc mừng! Bạn vừa học một trong những type definitions phức tạp nhất!
    */
   queryOptions?: Omit<
     UseQueryOptions<
@@ -126,7 +593,7 @@ export type UseOneProps<TQueryFnData, TError, TData> = {
     >,
     "queryKey" | "queryFn"
   > & {
-    // Cho phép override queryKey và queryFn (optional)
+    // Cho phép override queryKey và queryFn (optional) nếu cần custom logic
     queryKey?: UseQueryOptions<
       GetOneResponse<TQueryFnData>,
       TError,
