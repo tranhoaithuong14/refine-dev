@@ -1,73 +1,96 @@
+// ============================================================================
+// PHẦN 1: IMPORT CÁC THƯ VIỆN
+// ============================================================================
+
+// useEffect, useState: React hooks để quản lý state và side-effects
 import { useEffect, useState } from "react";
+// Hook custom của Refine để đọc RefineContext (lấy options cấu hình)
 import { useRefineContext } from "..";
 
+// ============================================================================
+// PHẦN 2: KHAI BÁO TYPES (TYPESCRIPT)
+// ============================================================================
+
+// Type option được lấy từ RefineContext (bắt buộc có interval, còn lại optional)
 export type UseLoadingOvertimeRefineContext = Omit<
   UseLoadingOvertimeCoreProps,
   "isLoading" | "interval"
 > &
   Required<Pick<UseLoadingOvertimeCoreProps, "interval">>;
 
+// Props cho component/hook khác: cho phép pass overtimeOptions (cấu hình)
 export type UseLoadingOvertimeOptionsProps = {
   overtimeOptions?: UseLoadingOvertimeCoreOptions;
 };
 
+// Return type khi gộp vào hooks khác (theo pattern Refine)
 export type UseLoadingOvertimeReturnType = {
   overtime: {
     elapsedTime?: number;
   };
 };
 
+// Core options: cùng với props hook, nhưng bỏ isLoading (vì isLoading bắt buộc)
 type UseLoadingOvertimeCoreOptions = Omit<
   UseLoadingOvertimeCoreProps,
   "isLoading"
 >;
 
+// Return type của hook chính
 type UseLoadingOvertimeCoreReturnType = {
   elapsedTime?: number;
 };
 
+// Props chính của hook
 export type UseLoadingOvertimeCoreProps = {
   /**
-   * If true, the elapsed time will be calculated. If set to false; the elapsed time will be `undefined`.
-   *
-   * @default: true
+   * Bật/tắt tính năng đo thời gian. Nếu false => elapsedTime sẽ là undefined.
+   * @default true
    */
   enabled?: boolean;
 
   /**
-   * The loading state. If true, the elapsed time will be calculated.
+   * Trạng thái loading hiện tại. Phải truyền để hook biết khi nào cần tính thời gian.
    */
   isLoading: boolean;
 
   /**
-   * The interval in milliseconds. If the loading time exceeds this time, the `onInterval` callback will be called.
-   * If not specified, the `interval` value from the `overtime` option of the `RefineProvider` will be used.
-   *
-   * @default: 1000 (1 second)
+   * Độ dài mỗi chu kỳ tính (ms). Sau mỗi interval, hàm onInterval sẽ được gọi.
+   * Nếu không truyền, dùng giá trị trong RefineProvider (options.overtime.interval).
+   * @default 1000 (1 giây)
    */
   interval?: number;
 
   /**
-   * The callback function that will be called when the loading time exceeds the specified time.
-   * If not specified, the `onInterval` value from the `overtime` option of the `RefineProvider` will be used.
-   *
-   * @param elapsedInterval The elapsed time in milliseconds.
+   * Callback khi thời gian chờ vượt qua từng interval.
+   * @param elapsedInterval Thời gian đã trôi qua (ms)
+   * Nếu không truyền, dùng onInterval từ RefineProvider (options.overtime.onInterval).
    */
   onInterval?: (elapsedInterval: number) => void;
 };
 
+// ============================================================================
+// PHẦN 3: HOOK USELOADINGOVERTIME
+// ============================================================================
+
 /**
- * if you need to do something when the loading time exceeds the specified time, refine provides the `useLoadingOvertime` hook.
- * It returns the elapsed time in milliseconds.
+ * 📚 useLoadingOvertime
  *
- * @example
- * const { elapsedTime } = useLoadingOvertime({
- *    isLoading,
- *    interval: 1000,
- *    onInterval(elapsedInterval) {
- *        console.log("loading overtime", elapsedInterval);
- *    },
- * });
+ * 🎯 Mục tiêu: Theo dõi "thời gian loading" và báo về mỗi khi vượt qua một khoảng thời gian (interval).
+ *
+ * 🔄 Cách hoạt động:
+ * 1. Lấy cấu hình mặc định từ RefineContext (options.overtime).
+ * 2. Cho phép override bằng props (enabled, interval, onInterval).
+ * 3. Khi isLoading=true, khởi chạy setInterval để tăng elapsedTime.
+ * 4. Gọi onInterval mỗi lần elapsedTime thay đổi (mỗi interval).
+ * 5. Khi isLoading=false hoặc unmount: clearInterval + reset elapsedTime.
+ *
+ * 📦 Giá trị trả về:
+ * - elapsedTime: số ms đã trôi qua kể từ lúc loading (undefined nếu disabled hoặc chưa loading).
+ *
+ * 💡 Ứng dụng:
+ * - Hiển thị skeleton hoặc tooltip "đang xử lý lâu..." sau 2-3 giây.
+ * - Gửi log/telemetry khi API quá lâu.
  */
 export const useLoadingOvertime = ({
   enabled: enabledProp,
@@ -75,12 +98,14 @@ export const useLoadingOvertime = ({
   interval: intervalProp,
   onInterval: onIntervalProp,
 }: UseLoadingOvertimeCoreProps): UseLoadingOvertimeCoreReturnType => {
+  // State lưu thời gian đã trôi qua (ms)
   const [elapsedTime, setElapsedTime] = useState<number | undefined>(undefined);
-  // get overtime options from refine context
+
+  // Lấy options từ RefineContext (do <Refine> cung cấp)
   const { options } = useRefineContext();
   const { overtime } = options;
 
-  // pick props or refine context options
+  // Chọn giá trị ưu tiên: props override context (nullish coalescing ??)
   const interval = intervalProp ?? overtime.interval;
   const onInterval = onIntervalProp ?? overtime?.onInterval;
   const enabled =
@@ -88,14 +113,15 @@ export const useLoadingOvertime = ({
       ? enabledProp
       : typeof overtime.enabled !== "undefined"
         ? overtime.enabled
-        : true;
+        : true; // default fallback
 
+  // Side-effect: Bắt đầu đếm thời gian khi loading + enabled
   useEffect(() => {
     let intervalFn: ReturnType<typeof setInterval>;
 
     if (enabled && isLoading) {
       intervalFn = setInterval(() => {
-        // increase elapsed time
+        // Tăng elapsedTime sau mỗi interval
         setElapsedTime((prevElapsedTime) => {
           if (prevElapsedTime === undefined) {
             return interval;
@@ -106,22 +132,24 @@ export const useLoadingOvertime = ({
       }, interval);
     }
 
+    // Cleanup khi isLoading false hoặc component unmount
     return () => {
       if (typeof intervalFn !== "undefined") {
         clearInterval(intervalFn);
       }
-      // reset elapsed time
+      // Reset elapsedTime về undefined (không tính tiếp)
       setElapsedTime(undefined);
     };
   }, [isLoading, interval, enabled]);
 
+  // Side-effect: Gọi callback mỗi khi elapsedTime thay đổi
   useEffect(() => {
-    // call onInterval callback
     if (onInterval && elapsedTime) {
       onInterval(elapsedTime);
     }
   }, [elapsedTime]);
 
+  // Trả về elapsedTime cho component/hook khác dùng
   return {
     elapsedTime,
   };
