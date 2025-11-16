@@ -39,17 +39,26 @@ export type UseRedirectionAfterSubmissionType = () => (options: {
  *
  * 🔄 Cách hoạt động:
  * 1. Lấy hàm điều hướng (show, edit, list, create) từ useNavigation.
+ *    - useNavigation là abstraction của Refine để push/replace route theo resource.
  * 2. Trả về hàm handleSubmitWithRedirect nhận { redirect, resource, id, meta }.
  * 3. Tùy theo redirect:
  *    - "show": chuyển tới trang chi tiết (cần id và resource.show phải tồn tại)
  *    - "edit": chuyển tới trang edit (cần id và resource.edit)
  *    - "create": mở trang create nếu resource hỗ trợ create
  *    - default/list: quay về list
- *    - false: không làm gì (return undefined)
+ *    - false/undefined: không làm gì (return undefined)
  *
  * 💡 Lưu ý:
  * - resource.show/edit/create được check để chắc chắn resource có route tương ứng.
  * - meta được forward vào navigation để giữ query params/metadata khi cần.
+ * - useCallback([]) giúp hàm ổn định, tránh re-render không cần thiết.
+ *
+ * 🔌 Ví dụ sử dụng với useForm:
+ * ```ts
+ * const handleSubmitWithRedirect = useRedirectionAfterSubmission();
+ * // ... Sau khi mutation thành công:
+ * handleSubmitWithRedirect({ redirect: redirect || "list", resource, id });
+ * ```
  */
 export const useRedirectionAfterSubmission: UseRedirectionAfterSubmissionType =
   () => {

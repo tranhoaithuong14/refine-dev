@@ -12,6 +12,17 @@ import { useRefineContext } from "..";
 // ============================================================================
 
 // Type option được lấy từ RefineContext (bắt buộc có interval, còn lại optional)
+/**
+ * 📖 TypeScript Utility Types:
+ * - Omit<T, K>: Loại bỏ các field K khỏi type T
+ * - Pick<T, K>: Lấy chỉ các field K từ type T
+ * - Required<T>: Biến tất cả field trong T thành bắt buộc (non-optional)
+ *
+ * Ở đây:
+ * - Omit<UseLoadingOvertimeCoreProps, "isLoading" | "interval"> bỏ 2 field này
+ * - Pick<UseLoadingOvertimeCoreProps, "interval"> lấy lại interval
+ * - Required<...> biến interval thành bắt buộc (vì context luôn cần có interval)
+ */
 export type UseLoadingOvertimeRefineContext = Omit<
   UseLoadingOvertimeCoreProps,
   "isLoading" | "interval"
@@ -91,6 +102,10 @@ export type UseLoadingOvertimeCoreProps = {
  * 💡 Ứng dụng:
  * - Hiển thị skeleton hoặc tooltip "đang xử lý lâu..." sau 2-3 giây.
  * - Gửi log/telemetry khi API quá lâu.
+ *
+ * 🔧 Ghi nhớ:
+ * - Hook này KHÔNG tự bật/tắt loading, bạn phải truyền isLoading từ nơi khác (useQuery, useMutation,...)
+ * - Nếu muốn tắt tính năng tạm thời, truyền enabled=false.
  */
 export const useLoadingOvertime = ({
   enabled: enabledProp,
@@ -115,7 +130,17 @@ export const useLoadingOvertime = ({
         ? overtime.enabled
         : true; // default fallback
 
-  // Side-effect: Bắt đầu đếm thời gian khi loading + enabled
+  /**
+   * 🎬 Side-effect #1: Bắt đầu đếm giờ khi loading=true và enabled=true
+   *
+   * - setInterval sẽ chạy mỗi `interval` ms.
+   * - Mỗi lần chạy, tăng elapsedTime lên `interval`.
+   * - Khi dependency (isLoading/interval/enabled) đổi hoặc unmount -> cleanup.
+   *
+   * 📖 Dependency Array: [isLoading, interval, enabled]
+   * - Nếu interval đổi, setInterval sẽ được tạo lại với giá trị mới.
+   * - Nếu isLoading=false => cleanup, reset elapsedTime.
+   */
   useEffect(() => {
     let intervalFn: ReturnType<typeof setInterval>;
 
@@ -142,7 +167,11 @@ export const useLoadingOvertime = ({
     };
   }, [isLoading, interval, enabled]);
 
-  // Side-effect: Gọi callback mỗi khi elapsedTime thay đổi
+  /**
+   * 🎬 Side-effect #2: Gọi onInterval mỗi khi elapsedTime thay đổi
+   * - Chỉ gọi nếu onInterval tồn tại và elapsedTime có giá trị.
+   * - Giúp gửi log/hiển thị thông báo mỗi X ms.
+   */
   useEffect(() => {
     if (onInterval && elapsedTime) {
       onInterval(elapsedTime);
