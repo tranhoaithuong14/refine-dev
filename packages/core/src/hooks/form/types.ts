@@ -79,6 +79,462 @@ import type { MakeOptional } from "../../definitions/types";
 // MakeOptional: Utility type để biến các field bắt buộc thành optional
 
 // ============================================================================
+// 📚 TÀI LIỆU TYPESCRIPT CHO NGƯỜI MỚI - ĐỌC KỸ PHẦN NÀY TRƯỚC!
+// ============================================================================
+
+/**
+ * ╔═══════════════════════════════════════════════════════════════════════════╗
+ * ║                                                                           ║
+ * ║   🎓 TYPESCRIPT CƠ BẢN - TẤT CẢ KHÁI NIỆM TRONG FILE NÀY                ║
+ * ║                                                                           ║
+ * ║   Phần này giải thích TẤT CẢ khái niệm TypeScript bạn sẽ gặp            ║
+ * ║   trong file types.ts này. Đọc kỹ để hiểu toàn bộ!                      ║
+ * ║                                                                           ║
+ * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 1️⃣ TYPE vs INTERFACE - Định nghĩa kiểu dữ liệu
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * TYPE = Định nghĩa kiểu dữ liệu (giống bản thiết kế)
+ *
+ * VD:
+ * type User = {
+ *   name: string;
+ *   age: number;
+ * }
+ *
+ * const user: User = {
+ *   name: "John",
+ *   age: 25
+ * }
+ *
+ * KHÁC BIỆT type vs interface:
+ * - type: Linh hoạt hơn, dùng cho union, intersection, primitive
+ * - interface: Chỉ dùng cho object, có thể extend
+ * → Refine dùng TYPE vì linh hoạt hơn!
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 2️⃣ EXPORT - Cho phép file khác import type này
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * export type User = { ... }
+ *
+ * → File khác có thể: import { User } from "./types"
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 3️⃣ GENERIC <T> - Biến cho kiểu dữ liệu
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Generic = Tham số kiểu dữ liệu (type parameter)
+ * Giống như hàm nhận tham số, nhưng là KIỂU DỮ LIỆU
+ *
+ * VD KHÔNG có Generic (cứng nhắc):
+ * type Box1 = { value: string }
+ * type Box2 = { value: number }
+ * type Box3 = { value: boolean }
+ * → Phải viết lại nhiều lần!
+ *
+ * VD CÓ Generic (linh hoạt):
+ * type Box<T> = { value: T }
+ * type Box1 = Box<string>   → { value: string }
+ * type Box2 = Box<number>   → { value: number }
+ * type Box3 = Box<boolean>  → { value: boolean }
+ * → Viết 1 lần, dùng nhiều lần!
+ *
+ * CÚ PHÁP:
+ * <T>           → 1 tham số generic
+ * <T1, T2>      → 2 tham số generic
+ * <T1, T2, T3>  → 3 tham số generic
+ *
+ * CONVENTION đặt tên:
+ * - T: Type (kiểu tổng quát)
+ * - TData: Kiểu dữ liệu
+ * - TError: Kiểu lỗi
+ * - TVariables: Kiểu biến đầu vào
+ * - TProps: Kiểu props
+ * - TResponse: Kiểu response
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 4️⃣ EXTENDS - Ràng buộc kiểu dữ liệu (QUAN TRỌNG!)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * EXTENDS = Ràng buộc Generic phải thỏa mãn điều kiện
+ *
+ * CÚ PHÁP: T extends Type
+ * → T phải là Type HOẶC con của Type (subtype)
+ *
+ * VD 1: Ràng buộc phải là object
+ * type GetData<T extends object> = { data: T }
+ *
+ * type User = { name: string }
+ * type Data1 = GetData<User>        // ✅ OK - User là object
+ * type Data2 = GetData<string>      // ❌ LỖI - string không phải object
+ * type Data3 = GetData<number>      // ❌ LỖI - number không phải object
+ *
+ * VD 2: Ràng buộc phải có thuộc tính id
+ * type GetData<T extends { id: number }> = { data: T }
+ *
+ * type User = { id: 1, name: "John" }
+ * type Post = { title: "Hello" }
+ * type Data1 = GetData<User>        // ✅ OK - User có id
+ * type Data2 = GetData<Post>        // ❌ LỖI - Post không có id
+ *
+ * VD 3: Ràng buộc trong Refine (bạn sẽ thấy nhiều trong file này)
+ * type UseFormProps<
+ *   TData extends BaseRecord = BaseRecord
+ * >
+ *
+ * Nghĩa là:
+ * - TData PHẢI là BaseRecord hoặc con của BaseRecord
+ * - Nếu không truyền TData, mặc định là BaseRecord
+ *
+ * TẠI SAO CẦN EXTENDS?
+ * ✅ Đảm bảo type-safe: Chỉ chấp nhận đúng kiểu
+ * ✅ Có autocomplete: Editor biết type có những gì
+ * ✅ Báo lỗi sớm: TypeScript báo lỗi trước khi chạy
+ *
+ * TRONG FILE NÀY, BẠN SẼ THẤY:
+ * - TData extends BaseRecord: Dữ liệu phải là object
+ * - TError extends HttpError: Lỗi phải là HttpError
+ * - TQueryFnData extends BaseRecord: Dữ liệu query phải là object
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 5️⃣ DEFAULT VALUE = - Giá trị mặc định cho Generic
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * CÚ PHÁP: T = DefaultType
+ *
+ * VD:
+ * type Box<T = string> = { value: T }
+ *
+ * type Box1 = Box<number>  → { value: number } (truyền number)
+ * type Box2 = Box          → { value: string } (dùng mặc định)
+ *
+ * TRONG REFINE:
+ * type UseFormProps<
+ *   TData extends BaseRecord = BaseRecord,
+ *   TError extends HttpError = HttpError
+ * >
+ *
+ * Nghĩa là:
+ * - TData mặc định = BaseRecord
+ * - TError mặc định = HttpError
+ * → Nếu không truyền, dùng giá trị mặc định!
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 6️⃣ UNION TYPE | - Chọn 1 trong nhiều kiểu
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * UNION = Dấu | nghĩa là "HOẶC"
+ *
+ * CÚ PHÁP: Type1 | Type2 | Type3
+ *
+ * VD:
+ * type Status = "success" | "error" | "loading"
+ *
+ * const s1: Status = "success"   // ✅ OK
+ * const s2: Status = "error"     // ✅ OK
+ * const s3: Status = "pending"   // ❌ LỖI - không có trong union
+ *
+ * type ID = string | number
+ *
+ * const id1: ID = "abc"   // ✅ OK
+ * const id2: ID = 123     // ✅ OK
+ * const id3: ID = true    // ❌ LỖI - boolean không có trong union
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 7️⃣ INTERSECTION TYPE & - Kết hợp nhiều kiểu
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * INTERSECTION = Dấu & nghĩa là "VÀ"
+ *
+ * CÚ PHÁP: Type1 & Type2 & Type3
+ * → Object phải có TẤT CẢ props của Type1, Type2, Type3
+ *
+ * VD:
+ * type Name = { name: string }
+ * type Age = { age: number }
+ * type User = Name & Age
+ *
+ * // User = { name: string, age: number }
+ *
+ * const user1: User = { name: "John", age: 25 }        // ✅ OK
+ * const user2: User = { name: "John" }                 // ❌ LỖI - thiếu age
+ * const user3: User = { age: 25 }                      // ❌ LỖI - thiếu name
+ *
+ * SO SÁNH | vs &:
+ * - | (Union): Chọn 1 trong nhiều (OR logic)
+ * - & (Intersection): Phải có tất cả (AND logic)
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 8️⃣ OPTIONAL ? - Thuộc tính không bắt buộc
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * OPTIONAL = Dấu ? sau tên thuộc tính
+ *
+ * VD:
+ * type User = {
+ *   name: string;     // Bắt buộc
+ *   age?: number;     // Không bắt buộc (optional)
+ * }
+ *
+ * const user1: User = { name: "John", age: 25 }   // ✅ OK
+ * const user2: User = { name: "John" }            // ✅ OK - age optional
+ * const user3: User = { age: 25 }                 // ❌ LỖI - name bắt buộc
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 9️⃣ UTILITY TYPES - Các type tiện ích có sẵn
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * TypeScript có SẴN nhiều utility types để biến đổi types
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ 9.1. Partial<T> - Biến TẤT CẢ props thành optional                     │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * VD:
+ * type User = { name: string; age: number }
+ * type PartialUser = Partial<User>
+ * // = { name?: string; age?: number }
+ *
+ * const user1: PartialUser = {}                      // ✅ OK
+ * const user2: PartialUser = { name: "John" }        // ✅ OK
+ * const user3: PartialUser = { name: "John", age: 25 } // ✅ OK
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ 9.2. Required<T> - Biến TẤT CẢ props thành bắt buộc                    │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * VD:
+ * type User = { name?: string; age?: number }
+ * type RequiredUser = Required<User>
+ * // = { name: string; age: number }
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ 9.3. Pick<T, Keys> - Lấy một số props từ T                             │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * VD:
+ * type User = { id: number; name: string; email: string; age: number }
+ * type UserPreview = Pick<User, "name" | "email">
+ * // = { name: string; email: string }
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ 9.4. Omit<T, Keys> - Bỏ đi một số props từ T                           │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * VD:
+ * type User = { id: number; name: string; email: string; age: number }
+ * type UserWithoutId = Omit<User, "id">
+ * // = { name: string; email: string; age: number }
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ 9.5. Record<Keys, Type> - Tạo object với keys cho trước                │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * VD:
+ * type Status = "success" | "error" | "loading"
+ * type Messages = Record<Status, string>
+ * // = { success: string; error: string; loading: string }
+ *
+ * const messages: Messages = {
+ *   success: "✅ OK",
+ *   error: "❌ Lỗi",
+ *   loading: "⏳ Đang tải..."
+ * }
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ 9.6. Extract<Union, Type> - Lấy ra các giá trị từ Union                │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * VD:
+ * type Action = "create" | "edit" | "delete" | "list" | "show"
+ * type FormAction = Extract<Action, "create" | "edit">
+ * // = "create" | "edit"
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ 9.7. Exclude<Union, Type> - Loại bỏ các giá trị từ Union               │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * VD:
+ * type Action = "create" | "edit" | "delete" | "list" | "show"
+ * type ViewAction = Exclude<Action, "create" | "edit" | "delete">
+ * // = "list" | "show"
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 🔟 KEYOF - Lấy tất cả keys của object type
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * KEYOF = Lấy TẤT CẢ tên thuộc tính thành Union Type
+ *
+ * VD:
+ * type User = { name: string; age: number; email: string }
+ * type UserKeys = keyof User
+ * // = "name" | "age" | "email"
+ *
+ * const key1: UserKeys = "name"    // ✅ OK
+ * const key2: UserKeys = "age"     // ✅ OK
+ * const key3: UserKeys = "phone"   // ❌ LỖI - không có trong User
+ *
+ * DÙNG VỚI ARRAY:
+ * Array<keyof User> = Array<"name" | "age" | "email">
+ *
+ * const keys: Array<keyof User> = ["name", "age"]  // ✅ OK
+ *
+ * LỢI ÍCH:
+ * ✅ Type-safe: Báo lỗi nếu gõ sai tên
+ * ✅ Autocomplete: Editor gợi ý các keys
+ * ✅ Tự cập nhật: Khi type thay đổi, keyof tự cập nhật
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 1️⃣1️⃣ INDEXED ACCESS TYPE - Lấy kiểu của một thuộc tính
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * CÚ PHÁP: Type["key"]
+ *
+ * VD:
+ * type User = {
+ *   name: string;
+ *   age: number;
+ *   address: { city: string; country: string }
+ * }
+ *
+ * type UserName = User["name"]        // = string
+ * type UserAge = User["age"]          // = number
+ * type UserAddress = User["address"]  // = { city: string; country: string }
+ * type City = User["address"]["city"] // = string
+ *
+ * TRONG REFINE:
+ * UseUpdateReturnType<TData, TError, TVariables>["mutation"]
+ * → Lấy kiểu của thuộc tính "mutation" từ UseUpdateReturnType
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 1️⃣2️⃣ TYPEOF - Lấy kiểu từ giá trị
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * TYPEOF = Lấy type từ một giá trị có sẵn
+ *
+ * VD:
+ * const user = { name: "John", age: 25 }
+ * type User = typeof user
+ * // = { name: string; age: number }
+ *
+ * const colors = ["red", "green", "blue"] as const
+ * type Color = typeof colors[number]
+ * // = "red" | "green" | "blue"
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 1️⃣3️⃣ CONDITIONAL TYPE - Type có điều kiện
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * CÚ PHÁP: T extends U ? X : Y
+ * → Nếu T là U (hoặc con của U) thì chọn X, nếu không thì chọn Y
+ *
+ * VD:
+ * type IsString<T> = T extends string ? "yes" : "no"
+ *
+ * type A = IsString<string>   // = "yes"
+ * type B = IsString<number>   // = "no"
+ * type C = IsString<boolean>  // = "no"
+ *
+ * VD phức tạp:
+ * type TypeName<T> =
+ *   T extends string ? "string" :
+ *   T extends number ? "number" :
+ *   T extends boolean ? "boolean" :
+ *   "object"
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 1️⃣4️⃣ MAPPED TYPE - Biến đổi type bằng map
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * CÚ PHÁP: { [K in Keys]: Type }
+ *
+ * VD tự tạo Partial:
+ * type MyPartial<T> = {
+ *   [K in keyof T]?: T[K]
+ * }
+ *
+ * VD tự tạo Record:
+ * type MyRecord<Keys extends string, T> = {
+ *   [K in Keys]: T
+ * }
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 1️⃣5️⃣ TEMPLATE LITERAL TYPE - String literal với template
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * CÚ PHÁP: `${Type1}${Type2}`
+ *
+ * VD:
+ * type Color = "red" | "blue"
+ * type Shade = "light" | "dark"
+ * type ColorShade = `${Shade}-${Color}`
+ * // = "light-red" | "light-blue" | "dark-red" | "dark-blue"
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 1️⃣6️⃣ PROMISE<T> - Kiểu cho async function
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Promise<T> = Kiểu cho giá trị bất đồng bộ
+ *
+ * VD:
+ * type Fetch = () => Promise<User>
+ *
+ * async function getUser(): Promise<User> {
+ *   return { name: "John", age: 25 }
+ * }
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 1️⃣7️⃣ VOID - Không có giá trị trả về
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * VOID = Hàm không return gì
+ *
+ * VD:
+ * type OnClick = () => void
+ *
+ * const handleClick: OnClick = () => {
+ *   console.log("clicked")
+ *   // Không có return
+ * }
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 🎯 TÓM TẮT - CÁC KHÁI NIỆM CHÍNH BẠN SẼ GẶP TRONG FILE NÀY
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * ✅ TYPE: Định nghĩa kiểu dữ liệu
+ * ✅ EXPORT: Cho phép import từ file khác
+ * ✅ GENERIC <T>: Biến cho kiểu dữ liệu
+ * ✅ EXTENDS: Ràng buộc generic (QUAN TRỌNG!)
+ * ✅ = DefaultValue: Giá trị mặc định
+ * ✅ | (Union): Chọn 1 trong nhiều (OR)
+ * ✅ & (Intersection): Kết hợp nhiều kiểu (AND)
+ * ✅ ?: Optional (không bắt buộc)
+ * ✅ UTILITY TYPES: Partial, Pick, Omit, Record, Extract, Exclude...
+ * ✅ KEYOF: Lấy tất cả keys
+ * ✅ TYPE["key"]: Lấy kiểu của thuộc tính
+ * ✅ TYPEOF: Lấy kiểu từ giá trị
+ * ✅ CONDITIONAL: T extends U ? X : Y
+ * ✅ MAPPED: { [K in Keys]: Type }
+ * ✅ PROMISE<T>: Kiểu async
+ * ✅ VOID: Không return
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 💡 LỜI KHUYÊN KHI ĐỌC FILE NÀY
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * 1. Đọc từ trên xuống dưới - types thường phụ thuộc vào nhau
+ * 2. Tập trung vào VÍ DỤ - dễ hiểu hơn định nghĩa
+ * 3. Không hiểu thì xem lại phần này - đọc lại nhiều lần
+ * 4. Thử nghiệm trong IDE - autocomplete sẽ giúp bạn hiểu
+ * 5. Đừng nản! TypeScript khó lúc đầu nhưng rất hữu ích sau này!
+ *
+ * 🎉 CHÚC BẠN HỌC TỐT!
+ */
+
+// ============================================================================
 // PHẦN 2: ĐỊNH NGHĨA CÁC KIỂU CƠ BẢN CHO FORM
 // ============================================================================
 
