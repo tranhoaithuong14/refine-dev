@@ -446,20 +446,238 @@ import type { MakeOptional } from "../../definitions/types";
  *   "object"
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * 1️⃣4️⃣ MAPPED TYPE - Biến đổi type bằng map
+ * 1️⃣4️⃣ MAPPED TYPE - Biến đổi type bằng map (QUAN TRỌNG!)
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * CÚ PHÁP: { [K in Keys]: Type }
+ * MAPPED TYPE = Lặp qua tất cả keys của một type và biến đổi chúng
+ * Giống như Array.map() nhưng cho KIỂU DỮ LIỆU!
  *
- * VD tự tạo Partial:
- * type MyPartial<T> = {
- *   [K in keyof T]?: T[K]
+ * CÚ PHÁP CƠ BẢN: { [K in Keys]: Type }
+ * - K: Tên biến đại diện cho từng key (giống i trong for loop)
+ * - in: Từ khóa để lặp (giống in trong for...in)
+ * - Keys: Danh sách keys cần lặp
+ * - Type: Kiểu cho mỗi key
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ VÍ DỤ 1: CƠ BẢN NHẤT - Tạo object từ union                             │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * // Bước 1: Có union type
+ * type Keys = "name" | "age" | "email"
+ *
+ * // Bước 2: Dùng Mapped Type để tạo object
+ * type User = {
+ *   [K in Keys]: string
  * }
  *
- * VD tự tạo Record:
+ * // Kết quả:
+ * // User = {
+ * //   name: string;
+ * //   age: string;
+ * //   email: string;
+ * // }
+ *
+ * GIẢI THÍCH CÁCH HOẠT ĐỘNG:
+ * 1. K lặp qua "name" | "age" | "email"
+ * 2. Lần 1: K = "name"  → tạo name: string
+ * 3. Lần 2: K = "age"   → tạo age: string
+ * 4. Lần 3: K = "email" → tạo email: string
+ * 5. Ghép lại thành object!
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ VÍ DỤ 2: TỰ TẠO RECORD - Hiểu rõ Record làm gì                         │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * // Record<Keys, Type> = Tạo object với keys cho trước
  * type MyRecord<Keys extends string, T> = {
  *   [K in Keys]: T
  * }
+ *
+ * // Sử dụng:
+ * type Status = "success" | "error" | "loading"
+ * type Messages = MyRecord<Status, string>
+ *
+ * // Kết quả:
+ * // Messages = {
+ * //   success: string;
+ * //   error: string;
+ * //   loading: string;
+ * // }
+ *
+ * GIẢI THÍCH:
+ * - Keys extends string: Keys phải là string
+ * - [K in Keys]: Lặp qua từng key
+ * - : T: Mỗi key có kiểu T
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ VÍ DỤ 3: TỰ TẠO PARTIAL - Biến tất cả thành optional                   │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * // Trước khi hiểu Mapped Type:
+ * type User = { name: string; age: number; email: string }
+ * // Muốn tạo:
+ * type PartialUser = { name?: string; age?: number; email?: string }
+ * // → Phải viết tay từng thuộc tính!
+ *
+ * // Với Mapped Type:
+ * type MyPartial<T> = {
+ *   [K in keyof T]?: T[K]
+ * }
+ * type PartialUser = MyPartial<User>
+ * // → Tự động tạo!
+ *
+ * GIẢI THÍCH TỪNG PHẦN:
+ *
+ * 1. keyof T
+ *    - Lấy tất cả keys của T
+ *    - VD: keyof User = "name" | "age" | "email"
+ *
+ * 2. [K in keyof T]
+ *    - Lặp qua từng key
+ *    - Lần 1: K = "name"
+ *    - Lần 2: K = "age"
+ *    - Lần 3: K = "email"
+ *
+ * 3. T[K]
+ *    - Lấy kiểu của key K trong T
+ *    - VD: T["name"] = string
+ *         T["age"] = number
+ *         T["email"] = string
+ *
+ * 4. [K in keyof T]?: T[K]
+ *    - ?: biến thành optional
+ *    - Kết quả:
+ *      name?: string
+ *      age?: number
+ *      email?: string
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ VÍ DỤ 4: TỰ TẠO REQUIRED - Biến tất cả thành bắt buộc                  │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * type MyRequired<T> = {
+ *   [K in keyof T]-?: T[K]
+ * }
+ * //                 ↑
+ * //                 Dấu - nghĩa là BỎ optional
+ *
+ * type User = { name?: string; age?: number }
+ * type RequiredUser = MyRequired<User>
+ * // = { name: string; age: number }
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ VÍ DỤ 5: TỰ TẠO READONLY - Biến tất cả thành chỉ đọc                   │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * type MyReadonly<T> = {
+ *   readonly [K in keyof T]: T[K]
+ * }
+ * //       ↑
+ * //       Thêm readonly trước key
+ *
+ * type User = { name: string; age: number }
+ * type ReadonlyUser = MyReadonly<User>
+ * // = { readonly name: string; readonly age: number }
+ *
+ * const user: ReadonlyUser = { name: "John", age: 25 }
+ * user.name = "Jane"  // ❌ LỖI - không thể thay đổi!
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ VÍ DỤ 6: BIẾN ĐỔI KIỂU - Chuyển tất cả thành string                    │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * type Stringify<T> = {
+ *   [K in keyof T]: string
+ * }
+ *
+ * type User = { name: string; age: number; isActive: boolean }
+ * type StringUser = Stringify<User>
+ * // = { name: string; age: string; isActive: string }
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ VÍ DỤ 7: BIẾN ĐỔI CÓ ĐIỀU KIỆN - Kết hợp với Conditional Type          │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * // Chuyển number thành string, giữ nguyên còn lại
+ * type NumberToString<T> = {
+ *   [K in keyof T]: T[K] extends number ? string : T[K]
+ * }
+ *
+ * type User = {
+ *   name: string;    // Không phải number → giữ nguyên string
+ *   age: number;     // Là number → chuyển thành string
+ *   isActive: boolean; // Không phải number → giữ nguyên boolean
+ * }
+ *
+ * type Result = NumberToString<User>
+ * // = {
+ * //   name: string;
+ * //   age: string;      ← Đã chuyển từ number sang string!
+ * //   isActive: boolean;
+ * // }
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ VÍ DỤ 8: TRONG REFINE - AutoSaveIndicatorElements                      │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * // Trong file này có dùng Mapped Type:
+ * type AutoSaveIndicatorElements = Partial<
+ *   Record<"success" | "error" | "loading" | "idle", React.ReactNode>
+ * >
+ *
+ * // Record sử dụng Mapped Type:
+ * type Record<K extends string, T> = {
+ *   [P in K]: T
+ * }
+ *
+ * // Phân tích:
+ * Record<"success" | "error" | "loading" | "idle", React.ReactNode>
+ * = {
+ *     success: React.ReactNode;
+ *     error: React.ReactNode;
+ *     loading: React.ReactNode;
+ *     idle: React.ReactNode;
+ *   }
+ *
+ * // Sau đó Partial biến tất cả thành optional:
+ * = {
+ *     success?: React.ReactNode;
+ *     error?: React.ReactNode;
+ *     loading?: React.ReactNode;
+ *     idle?: React.ReactNode;
+ *   }
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ 🎯 TÓM TẮT MAPPED TYPE                                                  │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * CÚ PHÁP: { [K in Keys]: Type }
+ *
+ * THÀNH PHẦN:
+ * - [K in ...]: Lặp qua keys (giống for...in)
+ * - K: Biến đại diện cho từng key
+ * - Keys: Danh sách keys cần lặp
+ * - Type: Kiểu cho mỗi key
+ *
+ * BIẾN THỂ:
+ * - [K in keyof T]: Lặp qua keys của T
+ * - [K in keyof T]?: Thêm optional
+ * - [K in keyof T]-?: Bỏ optional
+ * - readonly [K in keyof T]: Thêm readonly
+ * - [K in keyof T as NewKey]: Đổi tên key
+ * - T[K]: Lấy kiểu của key K
+ * - T[K] extends U ? X : Y: Điều kiện
+ *
+ * KHI NÀO DÙNG?
+ * ✅ Muốn biến đổi tất cả props của một type
+ * ✅ Tạo type mới từ union của strings
+ * ✅ Tự tạo utility types như Partial, Readonly, Record
+ * ✅ Biến đổi có điều kiện (VD: number → string)
+ *
+ * LỢI ÍCH:
+ * ✅ DRY (Don't Repeat Yourself): Không viết lại nhiều lần
+ * ✅ Type-safe: TypeScript check tự động
+ * ✅ Tự động cập nhật: Type gốc thay đổi → Mapped type tự cập nhật
  *
  * ═══════════════════════════════════════════════════════════════════════════
  * 1️⃣5️⃣ TEMPLATE LITERAL TYPE - String literal với template
