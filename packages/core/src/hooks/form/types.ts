@@ -111,19 +111,34 @@ export type FormAction = Extract<Action, "create" | "edit" | "clone">;
 /**
  * 🎯 RedirectAction - Nơi chuyển hướng sau khi submit form thành công
  *
- * Có thể redirect đến:
+ * 📖 UNION TYPE với dấu "|" (pipe):
+ * Dấu "|" nghĩa là "HOẶC" - giá trị có thể là 1 trong nhiều lựa chọn
+ *
+ * Cú pháp: Type1 | Type2 | Type3
+ * Nghĩa là: có thể là Type1 HOẶC Type2 HOẶC Type3
+ *
+ * VD đơn giản:
+ * type Status = "success" | "error" | "loading"
+ * const s1: Status = "success"  // ✅ OK
+ * const s2: Status = "pending"  // ❌ LỖI - không có trong danh sách
+ *
+ * Ở đây RedirectAction có thể là:
  * - "create": Trang tạo mới (ít dùng)
  * - "edit": Trang edit record vừa tạo/update
  * - "list": Danh sách records
  * - "show": Trang chi tiết record
  * - false: Không redirect (ở nguyên trang hiện tại)
  *
- * VD: Sau khi tạo mới post, redirect đến trang edit của post đó
- *     Sau khi edit post, redirect về danh sách posts
+ * VD sử dụng:
+ * const redirect1: RedirectAction = "list"   // ✅ OK
+ * const redirect2: RedirectAction = "edit"   // ✅ OK
+ * const redirect3: RedirectAction = false    // ✅ OK - không redirect
+ * const redirect4: RedirectAction = "delete" // ❌ LỖI - không có "delete"
+ * const redirect5: RedirectAction = true     // ❌ LỖI - chỉ có false
  */
 export type RedirectAction =
-  | Extract<Action, "create" | "edit" | "list" | "show">
-  | false;
+  | Extract<Action, "create" | "edit" | "list" | "show"> // Lấy 4 giá trị này từ Action
+  | false; // HOẶC false (boolean) - nghĩa là không redirect
 
 // ============================================================================
 // PHẦN 3: AUTO-SAVE TYPES - KIỂU DỮ LIỆU CHO TÍNH NĂNG TỰ ĐỘNG LƯU
@@ -135,7 +150,76 @@ export type RedirectAction =
  * Auto-save giúp tự động lưu form khi user ngừng gõ
  * Giống như Google Docs - gõ xong đợi 1-2 giây là tự động lưu
  *
- * @typeParam TVariables - Kiểu dữ liệu của form values
+ * 📖 GENERIC TYPE với <TVariables>:
+ *
+ * Dấu <> gọi là Generic - cho phép type này linh hoạt với nhiều kiểu dữ liệu khác nhau
+ * Generic giống như "BIẾN CHO KIỂU DỮ LIỆU"
+ *
+ * VD không dùng Generic (cứng nhắc):
+ * type AutoSavePropsForUser = {
+ *   autoSave?: {
+ *     onFinish?: (values: { name: string, email: string }) => ...
+ *   }
+ * }
+ * type AutoSavePropsForPost = {
+ *   autoSave?: {
+ *     onFinish?: (values: { title: string, content: string }) => ...
+ *   }
+ * }
+ * → Phải viết lại nhiều lần cho từng loại form!
+ *
+ * VD dùng Generic (linh hoạt):
+ * type AutoSaveProps<TVariables> = {
+ *   autoSave?: {
+ *     onFinish?: (values: TVariables) => ...
+ *   }
+ * }
+ * → Viết 1 lần, dùng cho mọi loại form!
+ *
+ * Cách sử dụng:
+ * // Form User
+ * type UserFormProps = AutoSaveProps<{ name: string, email: string }>
+ * → TVariables = { name: string, email: string }
+ *
+ * // Form Post
+ * type PostFormProps = AutoSaveProps<{ title: string, content: string }>
+ * → TVariables = { title: string, content: string }
+ *
+ * Lợi ích:
+ * ✅ Viết 1 lần, dùng nhiều lần
+ * ✅ Type-safe: TypeScript sẽ check đúng kiểu
+ * ✅ Autocomplete: Editor gợi ý đúng fields
+ *
+ * @typeParam TVariables - Kiểu dữ liệu của form values (dữ liệu trong form)
+ *                         VD: { name: string, email: string, age: number }
+ *
+ * 🤔 TẠI SAO GỌI LÀ "VARIABLES"?
+ *
+ * "Variables" = "Biến đầu vào" = Dữ liệu GỬI LÊN server khi submit form
+ *
+ * Trong form có 3 loại dữ liệu:
+ *
+ * 1. VARIABLES (Biến đầu vào) - Dữ liệu GỬI ĐI ⬆️
+ *    - Dữ liệu user nhập vào form
+ *    - Dữ liệu CÓ THỂ THAY ĐỔI (variable = biến đổi)
+ *    VD: { name: "John", email: "john@gmail.com" }
+ *    → Gửi lên server: POST /api/users { name: "John", email: "john@gmail.com" }
+ *
+ * 2. DATA (Dữ liệu) - Dữ liệu NHẬN VỀ ⬇️
+ *    - Dữ liệu từ API trả về khi query (lấy data)
+ *    VD: { id: 1, name: "John", email: "john@gmail.com", createdAt: "2024-01-01" }
+ *
+ * 3. RESPONSE (Phản hồi) - Kết quả sau mutation
+ *    - Kết quả sau khi create/update thành công
+ *    VD: { success: true, data: { id: 1, ... } }
+ *
+ * Thuật ngữ "Variables" là chuẩn quốc tế từ:
+ * - GraphQL: mutation CreateUser($variables: Input!) { ... }
+ * - React Query: mutation.mutate(variables)
+ * - TanStack Query: mutationFn: (variables) => api.post(variables)
+ * - Refine: onFinish(variables)
+ *
+ * → Refine theo chuẩn này để dễ học và tương thích với ecosystem!
  */
 export type AutoSaveProps<TVariables> = {
   /**
