@@ -283,13 +283,91 @@ export type AutoSaveProps<TVariables> = {
 /**
  * 🔄 AutoSaveReturnType - Dữ liệu trả về liên quan đến auto-save
  *
+ * 📦 TYPE NÀY RETURN VỀ CÁI GÌ?
+ *
+ * AutoSaveReturnType định nghĩa CẤU TRÚC của object mà hook useForm trả về cho auto-save.
+ * Nó KHÔNG phải là hàm trả về, mà là KIỂU DỮ LIỆU của object được trả về!
+ *
+ * Object trả về có 2 fields:
+ *
+ * 1. autoSaveProps - Object chứa trạng thái auto-save
+ *    {
+ *      data: { id: 1, name: "John" },     // Dữ liệu nếu thành công
+ *      error: null,                       // Lỗi nếu thất bại
+ *      status: "success"                  // Trạng thái hiện tại
+ *    }
+ *
+ * 2. onFinishAutoSave - Hàm để gọi auto-save thủ công
+ *    (values) => Promise<UpdateResponse | void>
+ *
+ * VD sử dụng thực tế:
+ * const {
+ *   autoSaveProps,      // ← Lấy trạng thái auto-save
+ *   onFinishAutoSave    // ← Lấy hàm auto-save
+ * } = useForm({ ... })
+ *
+ * // Hiển thị trạng thái
+ * if (autoSaveProps.status === "pending") {
+ *   return <span>Đang lưu...</span>
+ * }
+ * if (autoSaveProps.status === "success") {
+ *   return <span>✓ Đã lưu</span>
+ * }
+ *
+ * // Gọi auto-save thủ công
+ * await onFinishAutoSave({ name: "John" })
+ *
  * Hook useForm sẽ trả về các giá trị này để component có thể:
  * - Hiển thị trạng thái auto-save (đang lưu, lưu thành công, lỗi)
  * - Gọi auto-save thủ công nếu cần
  *
- * @typeParam TData - Kiểu dữ liệu response từ server
- * @typeParam TError - Kiểu lỗi HTTP
- * @typeParam TVariables - Kiểu dữ liệu form values
+ * 📖 GENERIC VỚI NHIỀU THAM SỐ:
+ *
+ * Generic có thể có 1, 2, 3 hoặc nhiều tham số!
+ * Cú pháp: <T1, T2, T3, ...>
+ *
+ * VD Generic 1 tham số (đơn giản):
+ * type Box<T> = { value: T }
+ * const box: Box<string> = { value: "hello" }
+ *
+ * VD Generic 2 tham số:
+ * type Result<TData, TError> = { data?: TData, error?: TError }
+ * const result: Result<User, Error> = { data: { name: "John" } }
+ *
+ * VD Generic 3 tham số (như dưới đây):
+ * type AutoSaveReturnType<TData, TError, TVariables> = { ... }
+ *
+ * TẠI SAO CẦN NHIỀU GENERIC?
+ * Vì auto-save cần quản lý 3 kiểu dữ liệu khác nhau:
+ *
+ * 1. TData - Dữ liệu NHẬN VỀ từ server sau khi auto-save
+ *    VD: { id: 1, name: "John", updatedAt: "2024-01-01" }
+ *
+ * 2. TError - Kiểu lỗi nếu auto-save thất bại
+ *    VD: { statusCode: 400, message: "Validation failed" }
+ *
+ * 3. TVariables - Dữ liệu GỬI LÊN server khi auto-save
+ *    VD: { name: "John", email: "john@test.com" }
+ *
+ * extends BaseRecord = BaseRecord:
+ * - "extends BaseRecord": TData phải là object (không được là string, number,...)
+ * - "= BaseRecord": Giá trị mặc định nếu không truyền vào
+ *
+ * TVariables = {}:
+ * - Không có "extends": TVariables có thể là bất kỳ kiểu nào
+ * - "= {}": Mặc định là object rỗng
+ *
+ * VD sử dụng:
+ * // Truyền đầy đủ 3 types:
+ * type MyAutoSave = AutoSaveReturnType<User, CustomError, UserFormData>
+ *
+ * // Dùng mặc định:
+ * type SimpleAutoSave = AutoSaveReturnType
+ * → TData = BaseRecord, TError = HttpError, TVariables = {}
+ *
+ * @typeParam TData - Kiểu dữ liệu response từ server (phải là object)
+ * @typeParam TError - Kiểu lỗi HTTP (mặc định HttpError)
+ * @typeParam TVariables - Kiểu dữ liệu form values (mặc định object rỗng)
  */
 export type AutoSaveReturnType<
   TData extends BaseRecord = BaseRecord,
