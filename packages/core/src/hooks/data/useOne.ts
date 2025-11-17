@@ -87,7 +87,759 @@ import {
  * - Self-documenting (code tự giải thích)
  */
 
-// Type cho props (tham số đầu vào) của useOne hook
+/**
+ * ============================================================================
+ * 🎓 BÀI GIẢNG: GENERIC TYPES TRONG TYPESCRIPT
+ * ============================================================================
+ *
+ * Generic là một trong những tính năng QUAN TRỌNG NHẤT của TypeScript!
+ * Hãy học kỹ phần này vì nó xuất hiện ở mọi nơi trong code TypeScript.
+ *
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │ PHẦN 1: GENERIC LÀ GÌ? 🤔                                           │
+ * └─────────────────────────────────────────────────────────────────────┘
+ *
+ * 📚 ĐỊNH NGHĨA:
+ *
+ * Generic Types (hay Generics) là cách để tạo ra các COMPONENT (function,
+ * class, interface, type) có thể hoạt động với NHIỀU KIỂU DỮ LIỆU khác nhau,
+ * mà vẫn giữ được TYPE SAFETY (an toàn kiểu).
+ *
+ * Hãy nghĩ về Generic như một "BIẾN CHO TYPE":
+ * - Biến thông thường: const x = 5  (x chứa giá trị)
+ * - Generic: type Box<T> = { value: T }  (T chứa kiểu dữ liệu)
+ *
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │ PHẦN 2: TẠI SAO CẦN GENERIC? 🎯                                     │
+ * └─────────────────────────────────────────────────────────────────────┘
+ *
+ * ❌ VẤN ĐỀ KHÔNG DÙNG GENERIC:
+ *
+ * Giả sử bạn muốn tạo một function để lấy item đầu tiên trong array.
+ *
+ * CÁCH 1: Dùng type cụ thể (BAD!)
+ * ```typescript
+ * function getFirstNumber(arr: number[]): number {
+ *   return arr[0];
+ * }
+ *
+ * function getFirstString(arr: string[]): string {
+ *   return arr[0];
+ * }
+ *
+ * function getFirstBoolean(arr: boolean[]): boolean {
+ *   return arr[0];
+ * }
+ *
+ * // Phải viết lại function cho MỖI type! 😱
+ * // Nếu có 100 types -> phải viết 100 functions!
+ * ```
+ *
+ * CÁCH 2: Dùng any (BAD!)
+ * ```typescript
+ * function getFirst(arr: any[]): any {
+ *   return arr[0];
+ * }
+ *
+ * const numbers = [1, 2, 3];
+ * const first = getFirst(numbers);
+ * // first có type là any -> mất type safety! 😱
+ * // TypeScript không biết first là number
+ * // Có thể gọi first.toUpperCase() mà không bị lỗi compile!
+ * ```
+ *
+ * ✅ GIẢI PHÁP: DÙNG GENERIC!
+ * ```typescript
+ * function getFirst<T>(arr: T[]): T {
+ *   return arr[0];
+ * }
+ *
+ * const numbers = [1, 2, 3];
+ * const first = getFirst(numbers);
+ * // TypeScript tự suy luận: T = number
+ * // first có type là number ✅
+ *
+ * const strings = ["a", "b", "c"];
+ * const firstStr = getFirst(strings);
+ * // TypeScript tự suy luận: T = string
+ * // firstStr có type là string ✅
+ *
+ * // MỘT function cho TẤT CẢ types!
+ * // VẪN GIỮ ĐƯỢC type safety!
+ * ```
+ *
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │ PHẦN 3: CÚ PHÁP GENERIC 📝                                          │
+ * └─────────────────────────────────────────────────────────────────────┘
+ *
+ * 🔤 CÚ PHÁP CƠ BẢN:
+ *
+ * ```typescript
+ * function functionName<T>(param: T): T {
+ *                      ^        ^     ^
+ *                      |        |     |
+ *              Khai báo  Dùng   Return
+ *              generic   trong  type
+ *              parameter param
+ * }
+ * ```
+ *
+ * - <T>: Khai báo generic parameter (tên T là convention, có thể đặt tên khác)
+ * - T: Sử dụng generic parameter như một type
+ *
+ * 📌 QUY ƯỚC ĐẶT TÊN:
+ *
+ * - T (Type): Generic parameter chung nhất
+ * - K (Key): Thường dùng cho object keys
+ * - V (Value): Thường dùng cho values
+ * - E (Element): Thường dùng cho array elements
+ * - R (Return): Thường dùng cho return types
+ *
+ * Trong Refine:
+ * - TData: Type của data
+ * - TError: Type của error
+ * - TQueryFnData: Type của data thô từ query function
+ * - TVariables: Type của variables
+ *
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │ PHẦN 4: VÍ DỤ TỪ ĐƠN GIẢN ĐẾN PHỨC TẠP 📚                          │
+ * └─────────────────────────────────────────────────────────────────────┘
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * VÍ DỤ 1: Generic Function - Cơ bản nhất
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * ```typescript
+ * // Generic function: identity (trả về chính nó)
+ * function identity<T>(value: T): T {
+ *   return value;
+ * }
+ *
+ * // SỬ DỤNG:
+ * const num = identity(42);
+ * // TypeScript suy luận: T = number
+ * // num: number = 42
+ *
+ * const str = identity("hello");
+ * // TypeScript suy luận: T = string
+ * // str: string = "hello"
+ *
+ * const obj = identity({ name: "John" });
+ * // TypeScript suy luận: T = { name: string }
+ * // obj: { name: string } = { name: "John" }
+ *
+ * // HOẶC CHỈ ĐỊNH TYPE RÕ RÀNG:
+ * const num2 = identity<number>(42);
+ * const str2 = identity<string>("hello");
+ * ```
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * VÍ DỤ 2: Generic với Array
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * ```typescript
+ * // Reverse array
+ * function reverseArray<T>(arr: T[]): T[] {
+ *   return arr.reverse();
+ * }
+ *
+ * const numbers = [1, 2, 3];
+ * const reversed = reverseArray(numbers);
+ * // reversed: number[] = [3, 2, 1]
+ *
+ * const strings = ["a", "b", "c"];
+ * const reversedStr = reverseArray(strings);
+ * // reversedStr: string[] = ["c", "b", "a"]
+ * ```
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * VÍ DỤ 3: Generic Type với Object
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * ```typescript
+ * // Box chứa một giá trị bất kỳ
+ * type Box<T> = {
+ *   value: T;
+ * };
+ *
+ * // SỬ DỤNG:
+ * const numberBox: Box<number> = { value: 42 };
+ * // numberBox.value có type là number
+ *
+ * const stringBox: Box<string> = { value: "hello" };
+ * // stringBox.value có type là string
+ *
+ * const personBox: Box<{ name: string; age: number }> = {
+ *   value: { name: "John", age: 30 }
+ * };
+ * // personBox.value có type là { name: string; age: number }
+ * ```
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * VÍ DỤ 4: Generic với NHIỀU Parameters
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * ```typescript
+ * // Pair chứa 2 giá trị khác type
+ * type Pair<T, U> = {
+ *   first: T;
+ *   second: U;
+ * };
+ *
+ * // SỬ DỤNG:
+ * const pair1: Pair<number, string> = {
+ *   first: 42,      // number
+ *   second: "hello" // string
+ * };
+ *
+ * const pair2: Pair<string, boolean> = {
+ *   first: "yes",  // string
+ *   second: true   // boolean
+ * };
+ *
+ * // Function với nhiều generic parameters
+ * function createPair<T, U>(first: T, second: U): Pair<T, U> {
+ *   return { first, second };
+ * }
+ *
+ * const pair3 = createPair(1, "one");
+ * // TypeScript suy luận: T = number, U = string
+ * // pair3: Pair<number, string>
+ * ```
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * VÍ DỤ 5: Generic với Constraints (Ràng buộc)
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * ```typescript
+ * // T phải có property 'length'
+ * function getLength<T extends { length: number }>(item: T): number {
+ *   return item.length;
+ * }
+ *
+ * // ✅ OK - string có length
+ * const len1 = getLength("hello");  // 5
+ *
+ * // ✅ OK - array có length
+ * const len2 = getLength([1, 2, 3]);  // 3
+ *
+ * // ❌ ERROR - number không có length
+ * // const len3 = getLength(42);  // Type error!
+ *
+ * // extends BaseRecord nghĩa là T phải là BaseRecord hoặc subtype của nó
+ * function processRecord<T extends BaseRecord>(record: T): T {
+ *   // record chắc chắn có các properties của BaseRecord
+ *   return record;
+ * }
+ * ```
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * VÍ DỤ 6: Generic với Default Type
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * ```typescript
+ * // T có default type là string
+ * type Container<T = string> = {
+ *   value: T;
+ * };
+ *
+ * // Không chỉ định T -> dùng default (string)
+ * const container1: Container = { value: "hello" };
+ * // container1.value: string
+ *
+ * // Chỉ định T = number
+ * const container2: Container<number> = { value: 42 };
+ * // container2.value: number
+ * ```
+ *
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │ PHẦN 5: GENERIC TRONG FILE useOne.ts - PHÂN TÍCH CHI TIẾT 🔍       │
+ * └─────────────────────────────────────────────────────────────────────┘
+ *
+ * File useOne.ts sử dụng NHIỀU generic parameters. Hãy phân tích TỪNG CÁI:
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔷 GENERIC 1: BaseRecord
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * ```typescript
+ * type BaseRecord = Record<string, any>;
+ * ```
+ *
+ * GIẢI THÍCH:
+ * - BaseRecord là type cơ bản cho MỌI record (bản ghi) trong Refine
+ * - Record<string, any> nghĩa là: object với keys là string, values là any
+ * - VD: { id: 1, name: "John", age: 30 }
+ *
+ * TẠI SAO CẦN?
+ * - Đảm bảo data từ API luôn là object (không phải string, number, array...)
+ * - Có thể mở rộng với properties bất kỳ
+ *
+ * VÍ DỤ:
+ * ```typescript
+ * type Post = {
+ *   id: number;
+ *   title: string;
+ *   content: string;
+ * }
+ *
+ * // Post extends BaseRecord ✅
+ * // Vì Post là object với keys là string
+ * ```
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔷 GENERIC 2: HttpError
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * ```typescript
+ * type HttpError = {
+ *   message: string;
+ *   statusCode: number;
+ * }
+ * ```
+ *
+ * GIẢI THÍCH:
+ * - HttpError là type cho lỗi HTTP
+ * - Chứa message (thông báo lỗi) và statusCode (404, 500,...)
+ *
+ * TẠI SAO CẦN?
+ * - Đảm bảo error object luôn có cấu trúc nhất định
+ * - Có thể mở rộng với properties khác (errors, data,...)
+ *
+ * VÍ DỤ:
+ * ```typescript
+ * const error: HttpError = {
+ *   message: "Not Found",
+ *   statusCode: 404
+ * };
+ * ```
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔷 GENERIC 3: GetOneResponse<T>
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * ```typescript
+ * type GetOneResponse<TData = BaseRecord> = {
+ *   data: TData;
+ * }
+ * ```
+ *
+ * GIẢI THÍCH:
+ * - GetOneResponse là WRAPPER type cho response từ getOne API
+ * - Nhận generic parameter TData (type của data bên trong)
+ * - Default type của TData là BaseRecord
+ *
+ * TẠI SAO CẦN?
+ * - API response luôn có cấu trúc { data: ... }
+ * - TData cho phép specify type cụ thể của data
+ *
+ * VÍ DỤ:
+ * ```typescript
+ * type Post = {
+ *   id: number;
+ *   title: string;
+ * };
+ *
+ * // Response khi fetch một Post
+ * type PostResponse = GetOneResponse<Post>;
+ * // Kết quả:
+ * // {
+ * //   data: {
+ * //     id: number;
+ * //     title: string;
+ * //   }
+ * // }
+ *
+ * const response: PostResponse = {
+ *   data: {
+ *     id: 1,
+ *     title: "Hello World"
+ *   }
+ * };
+ *
+ * response.data.id      // number ✅
+ * response.data.title   // string ✅
+ * response.data.age     // ERROR! ❌ (không có property age)
+ * ```
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔷 GENERIC 4-6: Hook Definition - TQueryFnData, TError, TData
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * ```typescript
+ * export const useOne = <
+ *   TQueryFnData extends BaseRecord = BaseRecord,
+ *   TError extends HttpError = HttpError,
+ *   TData extends BaseRecord = TQueryFnData,
+ * >({ ... }) => { ... }
+ * ```
+ *
+ * Đây là 3 GENERIC PARAMETERS chính của hook useOne!
+ *
+ * ─────────────────────────────────────────────────────────────────────
+ * 🔸 TQueryFnData: Type của dữ liệu THÔ từ API
+ * ─────────────────────────────────────────────────────────────────────
+ *
+ * GIẢI THÍCH:
+ * - TQueryFnData là type của data TRƯỚC KHI transform
+ * - extends BaseRecord: Phải là object
+ * - Default = BaseRecord: Nếu không specify, dùng BaseRecord
+ *
+ * KHI NÀO DÙNG?
+ * - Khi bạn muốn type-safe cho data từ API
+ * - Khi bạn biết cấu trúc của data từ API
+ *
+ * VÍ DỤ:
+ * ```typescript
+ * type Post = {
+ *   id: number;
+ *   title: string;
+ *   content: string;
+ * };
+ *
+ * const { query, result } = useOne<Post>({
+ *   resource: "posts",
+ *   id: 1
+ * });
+ *
+ * // query.data có type: GetOneResponse<Post> | undefined
+ * // query.data.data có type: Post
+ * // query.data.data.title có type: string ✅
+ * ```
+ *
+ * ─────────────────────────────────────────────────────────────────────
+ * 🔸 TError: Type của lỗi
+ * ─────────────────────────────────────────────────────────────────────
+ *
+ * GIẢI THÍCH:
+ * - TError là type của error object
+ * - extends HttpError: Phải có message và statusCode
+ * - Default = HttpError: Nếu không specify, dùng HttpError
+ *
+ * KHI NÀO DÙNG?
+ * - Khi bạn có custom error type
+ * - Khi API trả về error với cấu trúc khác
+ *
+ * VÍ DỤ:
+ * ```typescript
+ * type CustomError = HttpError & {
+ *   errorCode: string;
+ *   errors: string[];
+ * };
+ *
+ * const { query, result } = useOne<Post, CustomError>({
+ *   resource: "posts",
+ *   id: 1
+ * });
+ *
+ * // query.error có type: CustomError | null
+ * if (query.error) {
+ *   console.log(query.error.message);      // string ✅
+ *   console.log(query.error.statusCode);   // number ✅
+ *   console.log(query.error.errorCode);    // string ✅
+ *   console.log(query.error.errors);       // string[] ✅
+ * }
+ * ```
+ *
+ * ─────────────────────────────────────────────────────────────────────
+ * 🔸 TData: Type của dữ liệu SAU KHI transform (select)
+ * ─────────────────────────────────────────────────────────────────────
+ *
+ * GIẢI THÍCH:
+ * - TData là type của data SAU KHI qua select function
+ * - extends BaseRecord: Phải là object
+ * - Default = TQueryFnData: Nếu không select, type giống TQueryFnData
+ *
+ * KHI NÀO DÙNG?
+ * - Khi bạn dùng select để transform data
+ * - Khi bạn chỉ cần một phần của data
+ *
+ * VÍ DỤ:
+ * ```typescript
+ * type Post = {
+ *   id: number;
+ *   title: string;
+ *   content: string;
+ * };
+ *
+ * type PostTitle = {
+ *   title: string;
+ * };
+ *
+ * const { query, result } = useOne<Post, HttpError, PostTitle>({
+ *   resource: "posts",
+ *   id: 1,
+ *   queryOptions: {
+ *     select: (data) => ({
+ *       data: {
+ *         title: data.data.title
+ *       }
+ *     })
+ *   }
+ * });
+ *
+ * // result có type: PostTitle | undefined
+ * // result.title có type: string ✅
+ * // result.content  ❌ ERROR! (không có property này sau khi select)
+ * ```
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔷 TÓM TẮT: 3 GENERIC PARAMETERS VÀ FLOW DỮ LIỆU
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * ```
+ *                API RESPONSE
+ *                     │
+ *                     │ Type: GetOneResponse<TQueryFnData>
+ *                     │ Data: { data: { id: 1, title: "...", content: "..." } }
+ *                     ▼
+ *              TQueryFnData
+ *              (Data thô từ API)
+ *                     │
+ *                     │ Type: Post = { id, title, content }
+ *                     │
+ *                     ▼
+ *          [SELECT FUNCTION (optional)]
+ *                     │
+ *                     │ Transform: (data) => ({ data: { title: data.data.title } })
+ *                     │
+ *                     ▼
+ *                  TData
+ *           (Data sau transform)
+ *                     │
+ *                     │ Type: PostTitle = { title }
+ *                     │
+ *                     ▼
+ *                 RESULT
+ *          (Data trả về component)
+ *                     │
+ *                     │ result.title ✅
+ *                     │ result.content ❌ (không tồn tại)
+ *                     ▼
+ *               COMPONENT
+ * ```
+ *
+ * FLOW CHI TIẾT:
+ *
+ * 1️⃣ API trả về data:
+ *    Type: GetOneResponse<TQueryFnData>
+ *    Value: { data: { id: 1, title: "Hello", content: "World" } }
+ *
+ * 2️⃣ React Query cache data với type TQueryFnData
+ *
+ * 3️⃣ Nếu có select function:
+ *    - Input: GetOneResponse<TQueryFnData>
+ *    - Output: GetOneResponse<TData>
+ *    - Transform data theo logic của select
+ *
+ * 4️⃣ Hook trả về result:
+ *    - Type: TData | undefined
+ *    - Value: { title: "Hello" } (nếu có select)
+ *           hoặc { id: 1, title: "Hello", content: "World" } (nếu không select)
+ *
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │ PHẦN 6: VÍ DỤ THỰC TẾ - SỬ DỤNG useOne VỚI GENERIC 💡              │
+ * └─────────────────────────────────────────────────────────────────────┘
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * CASE 1: Không chỉ định generic (dùng default)
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * ```typescript
+ * const { query, result } = useOne({
+ *   resource: "posts",
+ *   id: 1
+ * });
+ *
+ * // TQueryFnData = BaseRecord (default)
+ * // TError = HttpError (default)
+ * // TData = BaseRecord (default)
+ *
+ * // result có type: BaseRecord | undefined
+ * // result có thể access bất kỳ property nào, nhưng type là any
+ * console.log(result?.id);       // any
+ * console.log(result?.title);    // any
+ * console.log(result?.anything); // any - không có type safety! ⚠️
+ * ```
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * CASE 2: Chỉ định TQueryFnData (khuyến khích!)
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * ```typescript
+ * type Post = {
+ *   id: number;
+ *   title: string;
+ *   content: string;
+ *   authorId: number;
+ * };
+ *
+ * const { query, result } = useOne<Post>({
+ *   resource: "posts",
+ *   id: 1
+ * });
+ *
+ * // TQueryFnData = Post
+ * // TError = HttpError (default)
+ * // TData = Post (default = TQueryFnData)
+ *
+ * // result có type: Post | undefined
+ * console.log(result?.id);       // number ✅
+ * console.log(result?.title);    // string ✅
+ * console.log(result?.content);  // string ✅
+ * console.log(result?.age);      // ERROR! ❌ Property 'age' doesn't exist
+ * ```
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * CASE 3: Chỉ định TQueryFnData + TError (custom error)
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * ```typescript
+ * type Post = {
+ *   id: number;
+ *   title: string;
+ * };
+ *
+ * type MyError = HttpError & {
+ *   timestamp: Date;
+ *   requestId: string;
+ * };
+ *
+ * const { query, result } = useOne<Post, MyError>({
+ *   resource: "posts",
+ *   id: 1,
+ *   errorNotification: (error, params, identifier) => {
+ *     // error có type: MyError ✅
+ *     console.log(error.message);     // string
+ *     console.log(error.statusCode);  // number
+ *     console.log(error.timestamp);   // Date ✅
+ *     console.log(error.requestId);   // string ✅
+ *
+ *     return {
+ *       message: `Error at ${error.timestamp}: ${error.message}`,
+ *       description: `Request ID: ${error.requestId}`
+ *     };
+ *   }
+ * });
+ * ```
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * CASE 4: Chỉ định cả 3 generics (với select transform)
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * ```typescript
+ * type Post = {
+ *   id: number;
+ *   title: string;
+ *   content: string;
+ *   authorId: number;
+ *   createdAt: string;
+ * };
+ *
+ * type PostPreview = {
+ *   id: number;
+ *   title: string;
+ * };
+ *
+ * const { query, result } = useOne<Post, HttpError, PostPreview>({
+ *   resource: "posts",
+ *   id: 1,
+ *   queryOptions: {
+ *     select: (data) => ({
+ *       // data có type: GetOneResponse<Post>
+ *       // data.data có type: Post
+ *       data: {
+ *         id: data.data.id,       // number
+ *         title: data.data.title  // string
+ *       }
+ *       // Return type: GetOneResponse<PostPreview>
+ *     })
+ *   }
+ * });
+ *
+ * // result có type: PostPreview | undefined ✅
+ * console.log(result?.id);       // number ✅
+ * console.log(result?.title);    // string ✅
+ * console.log(result?.content);  // ERROR! ❌ (không có sau khi select)
+ * console.log(result?.authorId); // ERROR! ❌ (không có sau khi select)
+ * ```
+ *
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │ PHẦN 7: LỢI ÍCH CỦA GENERIC 🎉                                      │
+ * └─────────────────────────────────────────────────────────────────────┘
+ *
+ * ✅ TYPE SAFETY:
+ * - Catch lỗi ngay khi compile, không phải chờ runtime
+ * - IDE autocomplete chính xác
+ *
+ * ✅ REUSABILITY:
+ * - Một hook/function cho nhiều types
+ * - Không cần copy-paste code
+ *
+ * ✅ MAINTAINABILITY:
+ * - Dễ refactor
+ * - Code tự document (type = documentation)
+ *
+ * ✅ DEVELOPER EXPERIENCE:
+ * - IDE suggestions chính xác
+ * - Giảm bugs
+ * - Tăng confidence khi code
+ *
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │ 🎓 TỔNG KẾT - NHỮNG ĐIỀU CẦN NHỚ                                    │
+ * └─────────────────────────────────────────────────────────────────────┘
+ *
+ * 1. ✅ Generic = "Biến cho Type"
+ *    - Cho phép component hoạt động với nhiều types
+ *
+ * 2. ✅ Cú pháp: <T>
+ *    - T là convention, có thể đặt tên khác
+ *    - Có thể có nhiều generic: <T, U, V>
+ *
+ * 3. ✅ Constraints: <T extends SomeType>
+ *    - Giới hạn T phải là subtype của SomeType
+ *
+ * 4. ✅ Default type: <T = DefaultType>
+ *    - Nếu không specify T, dùng DefaultType
+ *
+ * 5. ✅ Trong useOne:
+ *    - TQueryFnData: Data thô từ API
+ *    - TError: Type của error
+ *    - TData: Data sau transform (select)
+ *
+ * 6. ✅ Best practice:
+ *    - LUÔN specify ít nhất TQueryFnData
+ *    - Dùng TData khi có select
+ *    - Dùng TError khi có custom error type
+ *
+ * 👏 Chúc mừng! Bạn đã hiểu Generic Types - một trong những khái niệm
+ *    quan trọng nhất của TypeScript!
+ */
+
+// ═══════════════════════════════════════════════════════════════════════
+// 📌 TYPE DEFINITIONS CHO useOne HOOK
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * 🔷 UseOneProps<TQueryFnData, TError, TData>
+ *
+ * Type cho PROPS (tham số đầu vào) của useOne hook
+ *
+ * GENERIC PARAMETERS:
+ * - TQueryFnData: Type của data thô từ API (extends BaseRecord)
+ * - TError: Type của error (extends HttpError)
+ * - TData: Type của data sau transform (extends BaseRecord)
+ *
+ * VÍ DỤ:
+ * ```typescript
+ * type Post = { id: number; title: string };
+ *
+ * const props: UseOneProps<Post, HttpError, Post> = {
+ *   resource: "posts",
+ *   id: 1
+ * };
+ * ```
+ */
 export type UseOneProps<TQueryFnData, TError, TData> = {
   /**
    * Tên resource để tương tác với API
