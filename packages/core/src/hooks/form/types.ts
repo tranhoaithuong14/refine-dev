@@ -836,17 +836,169 @@ type ActionFormProps<
    * queryOptions? - Options cho React Query's useQuery (dùng trong edit mode)
    * @type UseQueryOptions
    *
-   * 📖 MakeOptional - Biến một số field thành optional
-   * Ở đây queryFn và queryKey là optional vì Refine tự generate
+   * 📖 PHÂN TÍCH CÚ PHÁP PHỨC TẠP - MakeOptional<UseQueryOptions<...>>
+   *
+   * Cú pháp này có 3 lớp lồng nhau, mình sẽ giải thích từ TRONG RA NGOÀI:
+   *
+   * ═══════════════════════════════════════════════════════════════════════
+   * LỚP 3 (TRONG CÙNG): GetOneResponse<T>
+   * ═══════════════════════════════════════════════════════════════════════
+   *
+   * GetOneResponse<TData> là type của Refine cho response khi lấy 1 record từ API
+   *
+   * Cấu trúc:
+   * type GetOneResponse<TData> = {
+   *   data: TData;  // Dữ liệu record
+   * }
+   *
+   * VD:
+   * type User = { id: 1, name: "John", email: "john@test.com" }
+   * type UserResponse = GetOneResponse<User>
+   * // = { data: { id: 1, name: "John", email: "john@test.com" } }
+   *
+   * ═══════════════════════════════════════════════════════════════════════
+   * LỚP 2 (GIỮA): UseQueryOptions<TQueryFnData, TError, TData>
+   * ═══════════════════════════════════════════════════════════════════════
+   *
+   * UseQueryOptions là type từ React Query cho các options của useQuery hook
+   *
+   * 3 tham số Generic:
+   * - TQueryFnData: Dữ liệu THÔ từ API trả về (trước khi transform)
+   * - TError: Kiểu lỗi nếu request thất bại
+   * - TData: Dữ liệu SAU KHI TRANSFORM (sau khi xử lý)
+   *
+   * VD:
+   * UseQueryOptions<
+   *   GetOneResponse<TQueryFnData>,  // ← Dữ liệu thô: { data: { id: 1, ... } }
+   *   TError,                        // ← Kiểu lỗi: HttpError
+   *   GetOneResponse<TData>          // ← Dữ liệu đã transform: { data: User }
+   * >
+   *
+   * Flow dữ liệu:
+   * 1. API trả về: GetOneResponse<TQueryFnData> (dữ liệu thô)
+   *    VD: { data: { id: 1, name: "John", age: 25, createdAt: "2024-01-01" } }
+   *
+   * 2. Transform (nếu có): TQueryFnData → TData
+   *    VD: Lọc bỏ createdAt, chỉ giữ id, name, age
+   *
+   * 3. Kết quả: GetOneResponse<TData> (dữ liệu đã xử lý)
+   *    VD: { data: { id: 1, name: "John", age: 25 } }
+   *
+   * UseQueryOptions chứa tất cả các tùy chọn:
+   * {
+   *   queryFn: () => fetch(...),       // Hàm fetch data (BẮT BUỘC thông thường)
+   *   queryKey: ["users", 1],          // Key để cache (BẮT BUỘC thông thường)
+   *   enabled: true,                   // Bật/tắt query
+   *   staleTime: 5000,                 // Thời gian data "tươi"
+   *   cacheTime: 300000,               // Thời gian giữ cache
+   *   refetchOnWindowFocus: true,      // Fetch lại khi focus window
+   *   retry: 3,                        // Số lần retry khi lỗi
+   *   onSuccess: (data) => {},         // Callback khi thành công
+   *   onError: (error) => {},          // Callback khi lỗi
+   * }
+   *
+   * ═══════════════════════════════════════════════════════════════════════
+   * LỚP 1 (NGOÀI CÙNG): MakeOptional<Type, Keys>
+   * ═══════════════════════════════════════════════════════════════════════
+   *
+   * MakeOptional là Utility Type biến một số fields thành OPTIONAL (không bắt buộc)
+   *
+   * Cú pháp: MakeOptional<Type, Keys>
+   * - Type: Type gốc cần biến đổi
+   * - Keys: Các keys sẽ biến thành optional
+   *
+   * VD đơn giản:
+   * type User = {
+   *   name: string;      // Bắt buộc
+   *   email: string;     // Bắt buộc
+   *   age: number;       // Bắt buộc
+   * }
+   *
+   * type PartialUser = MakeOptional<User, "email" | "age">
+   * // Kết quả:
+   * // {
+   * //   name: string;      // Vẫn bắt buộc
+   * //   email?: string;    // Giờ là optional
+   * //   age?: number;      // Giờ là optional
+   * // }
+   *
+   * Sử dụng:
+   * const user1: PartialUser = { name: "John" }                  // ✅ OK
+   * const user2: PartialUser = { name: "John", email: "..." }    // ✅ OK
+   * const user3: PartialUser = {}                                // ❌ LỖI - thiếu name
+   *
+   * ═══════════════════════════════════════════════════════════════════════
+   * GHÉP LẠI: MakeOptional<UseQueryOptions<...>, "queryFn" | "queryKey">
+   * ═══════════════════════════════════════════════════════════════════════
+   *
+   * Dịch sang tiếng người:
+   * "Lấy type UseQueryOptions (với các generic parameters),
+   *  NHƯNG biến queryFn và queryKey thành OPTIONAL"
+   *
+   * TẠI SAO CẦN MakeOptional?
+   * Vì Refine TỰ ĐỘNG GENERATE queryFn và queryKey cho bạn!
+   * Bạn KHÔNG CẦN truyền 2 fields này, chỉ cần truyền các options khác.
+   *
+   * ❌ KHÔNG có MakeOptional (bắt buộc queryFn và queryKey):
+   * queryOptions={{
+   *   queryFn: () => fetch("/api/users/1"),  // ← Phải có!
+   *   queryKey: ["users", 1],                // ← Phải có!
+   *   enabled: true,
+   *   staleTime: 5000
+   * }}
+   *
+   * ✅ CÓ MakeOptional (queryFn và queryKey là optional):
+   * queryOptions={{
+   *   enabled: true,        // ← Chỉ cần options này
+   *   staleTime: 5000,      // ← Và này thôi!
+   *   // queryFn: ... ← KHÔNG CẦN! Refine tự tạo
+   *   // queryKey: ... ← KHÔNG CẦN! Refine tự tạo
+   * }}
+   *
+   * ═══════════════════════════════════════════════════════════════════════
+   * TÓM TẮT CÚ PHÁP
+   * ═══════════════════════════════════════════════════════════════════════
+   *
+   * MakeOptional<
+   *   UseQueryOptions<
+   *     GetOneResponse<TQueryFnData>,  // ← Dữ liệu thô từ API
+   *     TError,                        // ← Kiểu lỗi
+   *     GetOneResponse<TData>          // ← Dữ liệu sau transform
+   *   >,
+   *   "queryFn" | "queryKey"  // ← 2 fields này là optional
+   * >
+   *
+   * = Object chứa các React Query options, NHƯNG queryFn và queryKey là optional
+   *
+   * ═══════════════════════════════════════════════════════════════════════
+   * VÍ DỤ SỬ DỤNG THỰC TẾ
+   * ═══════════════════════════════════════════════════════════════════════
+   *
+   * const { formProps } = useForm({
+   *   queryOptions: {
+   *     // KHÔNG CẦN queryFn và queryKey!
+   *     enabled: true,                    // Bật query
+   *     staleTime: 5 * 60 * 1000,        // Cache valid 5 phút
+   *     refetchOnWindowFocus: false,      // Không fetch lại khi focus
+   *     retry: 2,                         // Retry 2 lần nếu lỗi
+   *     onSuccess: (data) => {
+   *       console.log("Loaded:", data)
+   *     }
+   *   }
+   * })
+   *
+   * Refine sẽ TỰ ĐỘNG tạo:
+   * - queryFn: () => dataProvider.getOne({ resource, id })
+   * - queryKey: ["resource", "detail", id]
    *
    * Các options phổ biến:
    * - enabled: Bật/tắt query
    * - refetchOnWindowFocus: Fetch lại khi focus vào window
    * - staleTime: Thời gian data được coi là "tươi"
    * - cacheTime: Thời gian giữ cache
-   *
-   * VD: queryOptions={{ enabled: false }} → Tắt auto-fetch
-   *     queryOptions={{ staleTime: 5000 }} → Cache valid trong 5s
+   * - retry: Số lần retry khi lỗi
+   * - onSuccess: Callback khi thành công
+   * - onError: Callback khi lỗi
    *
    * Link doc: https://tanstack.com/query/v5/docs/framework/react/reference/useQuery
    */
