@@ -502,24 +502,40 @@ export type AutoSaveReturnType<
  * - Nếu status="loading" → Hiển thị "⟳ Đang lưu..."
  * - Nếu status="idle" → Không hiển thị gì
  *
- * 📋 VÍ DỤ ĐẦY ĐỦ:
- * ```
- * const { autoSaveProps } = useForm({
- *   resource: "posts",
- *   autoSave: { enabled: true }
- * })
+ * 📋 VÍ DỤ ĐẦY ĐỦ TRONG REFINE:
  *
- * const indicator: AutoSaveIndicatorElements = {
- *   success: "✅ Saved",
- *   error: "❌ Error",
- *   loading: "⏳ Saving..."
+ * TRUYỀN VÀO COMPONENT AutoSaveIndicator:
+ * File: packages/core/src/components/autoSaveIndicator/index.tsx
+ *
+ * import { useForm, AutoSaveIndicator } from "@refinedev/core"
+ *
+ * const customElements: AutoSaveIndicatorElements = {
+ *   success: "✅ Đã lưu!",
+ *   error: "❌ Lỗi!",
+ *   loading: "⏳ Đang lưu...",
+ *   idle: "💤 Chưa có thay đổi"
  * }
  *
- * // Hiển thị trong form
- * {autoSaveProps.status === "success" && indicator.success}
- * {autoSaveProps.status === "error" && indicator.error}
- * {autoSaveProps.status === "loading" && indicator.loading}
- * ```
+ * return (
+ *   // Component AutoSaveIndicator nhận prop elements
+ *   AutoSaveIndicator({
+ *     status: autoSaveProps.status,
+ *     elements: customElements  // ← Truyền vào đây!
+ *   })
+ * )
+ *
+ * CÁCH HOẠT ĐỘNG:
+ * Component dùng switch-case để render element phù hợp với status:
+ * - status="success" → Hiển thị elements.success
+ * - status="error" → Hiển thị elements.error
+ * - status="pending" → Hiển thị elements.loading
+ * - status="idle" → Hiển thị elements.idle
+ *
+ * GIÁ TRỊ MẶC ĐỊNH (nếu không truyền elements):
+ * - success: "saved" (có i18n translate)
+ * - error: "auto save failure"
+ * - loading: "saving..."
+ * - idle: "waiting for changes"
  *
  * 🎨 CÁC CÁCH TÙY CHỈNH:
  *
@@ -758,6 +774,48 @@ type ActionFormProps<
    * Sau khi create/update, cache của các queries này sẽ bị xóa
    * → Lần sau fetch sẽ lấy data mới từ server
    *
+   * 📖 KEYOF OPERATOR - Lấy tất cả keys của một object type
+   *
+   * keyof Type = Lấy tất cả TÊN THUỘC TÍNH của Type thành Union Type
+   *
+   * VD cơ bản:
+   * type User = { name: string; age: number; email: string }
+   * keyof User = "name" | "age" | "email"
+   *
+   * Với Array:
+   * Array<keyof User> = Array<"name" | "age" | "email">
+   * = ("name" | "age" | "email")[]
+   *
+   * Sử dụng:
+   * const keys1: Array<keyof User> = ["name"]              // ✅ OK
+   * const keys2: Array<keyof User> = ["name", "age"]       // ✅ OK
+   * const keys3: Array<keyof User> = ["phone"]             // ❌ LỖI - không có trong User
+   *
+   * Trong Refine:
+   * type IQueryKeys = {
+   *   all: string[];
+   *   resourceAll: string[];
+   *   list: string[];
+   *   many: string[];
+   *   detail: string;
+   * }
+   *
+   * keyof IQueryKeys = "all" | "resourceAll" | "list" | "many" | "detail"
+   *
+   * Array<keyof IQueryKeys> = Array<"all" | "resourceAll" | "list" | "many" | "detail">
+   *
+   * Lợi ích của keyof:
+   * ✅ Type-safe: TypeScript báo lỗi nếu gõ sai tên
+   * ✅ Autocomplete: Editor gợi ý các keys có sẵn
+   * ✅ Tự động cập nhật: Khi IQueryKeys thay đổi, keyof tự cập nhật
+   *
+   * So sánh:
+   * // ❌ KHÔNG type-safe:
+   * invalidates: string[] = ["list", "detial"]  // Gõ sai → Không báo lỗi!
+   *
+   * // ✅ Type-safe với keyof:
+   * invalidates: Array<keyof IQueryKeys> = ["list", "detial"]  // ❌ Báo lỗi ngay!
+   *
    * Các giá trị có thể:
    * - "all": Xóa tất cả cache
    * - "resourceAll": Xóa cache của resource này
@@ -766,7 +824,11 @@ type ActionFormProps<
    * - "detail": Xóa cache của getOne
    * - false: Không xóa cache nào
    *
-   * VD: invalidates={["list"]} → Chỉ làm mới danh sách
+   * VD sử dụng:
+   * invalidates={["list"]}                    // ✅ Chỉ làm mới danh sách
+   * invalidates={["list", "detail"]}          // ✅ Làm mới list và detail
+   * invalidates={["all"]}                     // ✅ Làm mới tất cả
+   * invalidates={["list", "invalid"]}         // ❌ LỖI - "invalid" không tồn tại
    */
   invalidates?: Array<keyof IQueryKeys>;
 
