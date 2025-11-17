@@ -474,27 +474,90 @@ export type AutoSaveReturnType<
 /**
  * 🎨 AutoSaveIndicatorElements - Các React elements để hiển thị trạng thái auto-save
  *
- * 📖 Partial<Type> - Utility type biến tất cả fields thành optional
+ * 🎯 TYPE NÀY DÙNG Ở ĐÂU? DÙNG NHƯ THẾ NÀO?
+ *
+ * Type này để CUSTOMIZE GIAO DIỆN hiển thị trạng thái auto-save.
+ * Thay vì dùng text mặc định, bạn có thể truyền vào icon, component, hoặc JSX tùy chỉnh.
+ *
+ * 🔗 LIÊN QUAN VỚI:
+ * - AutoSaveReturnType: Trả về autoSaveProps chứa status
+ * - AutoSaveIndicator Component: Component nhận elements này để render UI
+ *
+ * 💡 CÁCH SỬ DỤNG THỰC TẾ:
+ *
+ * Bước 1: Tạo custom elements
+ * ```
+ * const customIndicator: AutoSaveIndicatorElements = {
+ *   success: "✓ Đã lưu",      // Text đơn giản
+ *   error: "✗ Lỗi",          // Hoặc React element
+ *   loading: "⟳ Đang lưu...",
+ *   idle: null               // Không hiển thị gì
+ * }
+ * ```
+ *
+ * Bước 2: Dùng trong component
+ * Component AutoSaveIndicator sẽ nhận status và hiển thị element tương ứng:
+ * - Nếu status="success" → Hiển thị "✓ Đã lưu"
+ * - Nếu status="error" → Hiển thị "✗ Lỗi"
+ * - Nếu status="loading" → Hiển thị "⟳ Đang lưu..."
+ * - Nếu status="idle" → Không hiển thị gì
+ *
+ * 📋 VÍ DỤ ĐẦY ĐỦ:
+ * ```
+ * const { autoSaveProps } = useForm({
+ *   resource: "posts",
+ *   autoSave: { enabled: true }
+ * })
+ *
+ * const indicator: AutoSaveIndicatorElements = {
+ *   success: "✅ Saved",
+ *   error: "❌ Error",
+ *   loading: "⏳ Saving..."
+ * }
+ *
+ * // Hiển thị trong form
+ * {autoSaveProps.status === "success" && indicator.success}
+ * {autoSaveProps.status === "error" && indicator.error}
+ * {autoSaveProps.status === "loading" && indicator.loading}
+ * ```
+ *
+ * 🎨 CÁC CÁCH TÙY CHỈNH:
+ *
+ * 1. Text đơn giản:
+ *    { success: "✓", error: "✗", loading: "⟳" }
+ *
+ * 2. Emoji:
+ *    { success: "✅ Saved", error: "❌ Error", loading: "⏳ Saving..." }
+ *
+ * 3. React Element (JSX):
+ *    Bạn có thể truyền bất kỳ React element nào
+ *    (Component, span với style, icon component,...)
+ *
+ * 📖 Partial - Utility type biến tất cả fields thành optional
  *
  * VD: type User = { name: string, email: string }
  *     Partial<User> → { name?: string, email?: string }
  *
- * 📖 Record<Keys, Type> - Tạo object type với keys cho trước
+ * 📖 Record - Tạo object type với keys cho trước
  *
  * VD: Record<"success" | "error", string>
  *     → { success: string, error: string }
  *
+ * Tại sao dùng Partial?
+ * - Bạn không bắt buộc phải define tất cả 4 trạng thái
+ * - Có thể chỉ custom 1-2 trạng thái, còn lại dùng mặc định
+ *
  * Type này cho phép customize UI cho từng trạng thái:
- * - success: Hiển thị khi auto-save thành công (VD: ✓ Đã lưu)
- * - error: Hiển thị khi auto-save thất bại (VD: ✗ Lỗi)
- * - loading: Hiển thị khi đang auto-save (VD: ⟳ Đang lưu...)
- * - idle: Hiển thị khi không làm gì (VD: không hiện gì)
+ * - success?: Hiển thị khi auto-save thành công (VD: ✓ Đã lưu)
+ * - error?: Hiển thị khi auto-save thất bại (VD: ✗ Lỗi)
+ * - loading?: Hiển thị khi đang auto-save (VD: ⟳ Đang lưu...)
+ * - idle?: Hiển thị khi không làm gì (VD: không hiện gì)
  */
 export type AutoSaveIndicatorElements = Partial<
   Record<"success" | "error" | "loading" | "idle", React.ReactNode>
 >;
 // React.ReactNode: Bất kỳ thứ gì có thể render trong React
-// (string, number, JSX element, null, undefined,...)
+// (string, number, JSX element, component, null, undefined,...)
 
 // ============================================================================
 // PHẦN 4: ACTION PARAMS - THAM SỐ ACTION
