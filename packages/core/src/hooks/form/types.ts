@@ -393,12 +393,76 @@ export type AutoSaveReturnType<
   // status: Trạng thái ("idle" | "pending" | "success" | "error")
 
   /**
-   * onFinishAutoSave - Hàm để gọi auto-save thủ công
+   * onFinishAutoSave - Hàm để gọi auto-save THỦ CÔNG
    *
    * @param values - Dữ liệu form cần lưu
    * @returns Promise - Có thể await để đợi kết quả
    *
-   * VD: await onFinishAutoSave(formValues)
+   * 🤔 KHI NÀO CẦN GỌI AUTO-SAVE THỦ CÔNG?
+   *
+   * Auto-save có 2 chế độ:
+   *
+   * 1️⃣ TỰ ĐỘNG (Automatic) - KHÔNG cần gọi hàm này
+   *    - User gõ vào form
+   *    - Đợi 1-2 giây (debounce)
+   *    - Hook TỰ ĐỘNG gọi auto-save
+   *    → Bạn không làm gì cả!
+   *
+   * 2️⃣ THỦ CÔNG (Manual) - CẦN gọi hàm onFinishAutoSave
+   *    Dùng khi bạn muốn KIỂM SOÁT chính xác KHI NÀO lưu:
+   *
+   *    a) Lưu khi user BLUR khỏi field (rời khỏi ô input):
+   *       <input
+   *         onBlur={() => onFinishAutoSave(formValues)}
+   *       />
+   *
+   *    b) Lưu khi user CLICK NÚT "Lưu nháp":
+   *       <button onClick={() => onFinishAutoSave(formValues)}>
+   *         💾 Lưu nháp
+   *       </button>
+   *
+   *    c) Lưu khi user CHUYỂN TAB (switch tab):
+   *       <Tabs onChange={() => onFinishAutoSave(formValues)}>
+   *         ...
+   *       </Tabs>
+   *
+   *    d) Lưu khi ĐÓNG MODAL (trước khi đóng):
+   *       const handleClose = async () => {
+   *         await onFinishAutoSave(formValues)
+   *         closeModal()
+   *       }
+   *
+   *    e) Lưu theo INTERVAL (mỗi X phút):
+   *       useEffect(() => {
+   *         const interval = setInterval(() => {
+   *           onFinishAutoSave(formValues)
+   *         }, 5 * 60 * 1000) // Mỗi 5 phút
+   *         return () => clearInterval(interval)
+   *       }, [])
+   *
+   *    f) Lưu khi user CHỌN CHECKBOX/RADIO:
+   *       <Checkbox
+   *         onChange={(checked) => {
+   *           setFormValues({ ...formValues, agreed: checked })
+   *           onFinishAutoSave({ ...formValues, agreed: checked })
+   *         }}
+   *       />
+   *
+   * 🎯 TÓM TẮT:
+   * - TỰ ĐỘNG: Dùng khi muốn lưu sau khi user ngừng gõ
+   * - THỦ CÔNG: Dùng khi muốn lưu theo event cụ thể (blur, click, close,...)
+   *
+   * VD đầy đủ:
+   * const { onFinishAutoSave, autoSaveProps } = useForm({ ... })
+   *
+   * // Lưu khi blur
+   * <input
+   *   name="title"
+   *   onBlur={() => onFinishAutoSave(formValues)}
+   * />
+   *
+   * // Hiển thị trạng thái
+   * {autoSaveProps.status === "pending" && <span>Đang lưu...</span>}
    */
   onFinishAutoSave: (
     values: TVariables,
