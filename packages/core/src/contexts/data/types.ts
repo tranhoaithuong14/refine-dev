@@ -854,20 +854,156 @@ export type RefineError = HttpError;
  */
 export type MutationMode = "pessimistic" | "optimistic" | "undoable";
 
+/**
+ * 📊 QueryResponse<T> - Union của GetList và GetOne response
+ *
+ * QueryResponse = GetListResponse<T> | GetOneResponse<T>
+ *
+ * → Response có thể là:
+ *   - GetListResponse: Danh sách records (data: T[], total: number)
+ *   - GetOneResponse: 1 record (data: T)
+ *
+ * DÙNG TRONG:
+ * - Type cho responses tổng quát
+ * - Context queries
+ */
 export type QueryResponse<T = BaseRecord> =
   | GetListResponse<T>
   | GetOneResponse<T>;
 
+/**
+ * 📝 PreviousQuery<TData> - Tuple lưu query trước đó
+ *
+ * TUPLE TYPE: [QueryKey, TData | unknown]
+ *
+ * GIẢI THÍCH:
+ * - Tuple = Array có độ dài cố định và type cụ thể cho từng phần tử
+ * - [0]: QueryKey - Key của query
+ * - [1]: TData | unknown - Data của query (hoặc unknown nếu chưa có)
+ *
+ * VD:
+ * const prevQuery: PreviousQuery<User> = [
+ *   ["users", "list"],           // QueryKey
+ *   { data: [...], total: 100 }  // Data
+ * ]
+ *
+ * DÙNG TRONG:
+ * - Optimistic updates
+ * - Rollback khi mutation fail
+ * - Cache management
+ */
 export type PreviousQuery<TData> = [QueryKey, TData | unknown];
 
+/**
+ * 🔄 PrevContext<TData> - Context chứa các queries trước đó
+ *
+ * CẤU TRÚC:
+ * {
+ *   previousQueries: PreviousQuery<TData>[];  // Mảng các queries
+ * }
+ *
+ * VD:
+ * const prevContext: PrevContext<User> = {
+ *   previousQueries: [
+ *     [["users", "list"], { data: [...], total: 100 }],
+ *     [["users", "detail", 1], { data: {...} }]
+ *   ]
+ * }
+ *
+ * DÙNG TRONG:
+ * - Mutation context (onMutate)
+ * - Lưu snapshot trước khi update
+ * - Rollback nếu mutation fail
+ *
+ * FLOW:
+ * 1. onMutate: Lưu previousQueries
+ * 2. Mutation thành công: Xóa previousQueries
+ * 3. Mutation fail: Rollback từ previousQueries
+ */
 export type PrevContext<TData> = {
   previousQueries: PreviousQuery<TData>[];
 };
 
+/**
+ * 🎯 Context - Context chứa các queries (generic version)
+ *
+ * CẤU TRÚC:
+ * {
+ *   previousQueries: ContextQuery[];  // Mảng ContextQuery
+ * }
+ *
+ * KHÁC VỚI PrevContext:
+ * - PrevContext: Dùng PreviousQuery (tuple simple)
+ * - Context: Dùng ContextQuery (object với query và queryKey riêng)
+ *
+ * VD:
+ * const context: Context = {
+ *   previousQueries: [
+ *     {
+ *       query: { data: [...], total: 100 },
+ *       queryKey: ["users", "list"]
+ *     },
+ *     {
+ *       query: { data: {...} },
+ *       queryKey: ["users", "detail", 1]
+ *     }
+ *   ]
+ * }
+ */
 export type Context = {
   previousQueries: ContextQuery[];
 };
 
+/**
+ * 🔍 ContextQuery<T> - Query với key trong context
+ *
+ * CẤU TRÚC:
+ * {
+ *   query: QueryResponse<T>;  // Response (GetList hoặc GetOne)
+ *   queryKey: QueryKey;       // Key của query
+ * }
+ *
+ * GIẢI THÍCH:
+ *
+ * 1. query: QueryResponse<T>
+ *    - Có thể là GetListResponse hoặc GetOneResponse
+ *    - Chứa data thực tế
+ *
+ * 2. queryKey: QueryKey
+ *    - Key để identify query
+ *    - Dùng cho React Query cache
+ *
+ * VD 1: List query
+ * const contextQuery: ContextQuery<User> = {
+ *   query: {
+ *     data: [
+ *       { id: 1, name: "John" },
+ *       { id: 2, name: "Jane" }
+ *     ],
+ *     total: 100
+ *   },
+ *   queryKey: ["users", "list", { page: 1 }]
+ * }
+ *
+ * VD 2: Detail query
+ * const contextQuery: ContextQuery<Post> = {
+ *   query: {
+ *     data: { id: 1, title: "Hello" }
+ *   },
+ *   queryKey: ["posts", "detail", 1]
+ * }
+ *
+ * DÙNG TRONG:
+ * - Mutation context
+ * - Optimistic updates
+ * - Query invalidation
+ *
+ * FLOW OPTIMISTIC UPDATE:
+ * 1. onMutate: Snapshot current queries vào Context
+ * 2. Optimistically update UI
+ * 3. onError: Rollback từ Context.previousQueries
+ * 4. onSuccess: Clear context
+ */
 export type ContextQuery<T = BaseRecord> = {
   query: QueryResponse<T>;
   queryKey: QueryKey;
