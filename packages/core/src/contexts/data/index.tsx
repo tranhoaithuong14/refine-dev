@@ -24,6 +24,9 @@
 //   Ví dụ: type CardProps = PropsWithChildren<{ title: string }>;
 // - Generic <T> trong TypeScript = "biến kiểu" (chi tiết xem types.ts trong hooks/form).
 //   Ví dụ: function wrap<T>(value: T): T[] { return [value]; }
+// - JSX = cú pháp viết HTML trong JS/TS, được transpile thành React.createElement.
+//   Ví dụ: <button className="primary">Lưu</button>
+//   Tương đương: React.createElement("button", { className: "primary" }, "Lưu")
 //
 // 🌐 Business logic:
 // - Nếu bạn truyền 1 data provider duy nhất (có các method getList, getOne,...), mã sẽ tự
@@ -76,6 +79,21 @@ type Props = PropsWithChildren<{
 //   * React.FC = React Function Component (component dạng hàm).
 //   * Tự thêm kiểu cho props, đồng thời đảm bảo component nhận "children".
 //   * <Props> là Generic: truyền kiểu props đã định nghĩa ở trên.
+// - Vì sao Refine thiết kế thế này?
+//   * Mục tiêu: Chia sẻ data provider (cách nói chuyện với backend) cho TẤT CẢ hook/data component.
+//   * Lựa chọn Context giúp tránh phải truyền props dataProvider qua từng component → giảm lặp.
+//   * Hỗ trợ nhiều provider: nếu app cần backend phụ (analytics/report), có thể đăng ký thêm key khác.
+//   * Dễ test: có thể mock DataContextProvider với provider giả trong unit test.
+// - Có cách khác không?
+//   * Có thể dùng singleton/module global, nhưng khó test và khó thay đổi theo từng subtree.
+//   * Có thể truyền prop manual xuống từng component, nhưng rườm rà và khó bảo trì.
+//   * Redux/Zustand cũng được, nhưng Context đơn giản đủ cho cấu hình provider.
+// - Phù hợp/sở trường:
+//   * Context thích hợp cho giá trị cấu hình ít thay đổi (data provider là cấu hình).
+//   * Khi cần override theo scope nhỏ (VD: 1 trang dùng provider khác), chỉ cần lồng Provider.
+// - Đây có phải “tốt nhất”?
+//   * Là giải pháp thực dụng và chuẩn React cho “dependency injection” nhẹ.
+//   * Tối ưu cho DX: hook Refine tự đọc từ context, người dùng không phải cấu hình phức tạp.
 // ----------------------------------------------------------------------------
 export const DataContextProvider: React.FC<Props> = ({
   children,
@@ -110,9 +128,30 @@ export const DataContextProvider: React.FC<Props> = ({
   //   const myDataProvider: DataProvider = { getList: async () => {...}, getOne: async () => {...}, ... };
   //   const App = () => (
   //     <DataContextProvider dataProvider={myDataProvider}>
-  //       <Page />   // Bên trong Page, gọi useContext(DataContext) hoặc các hook refine sẽ lấy được myDataProvider
+  //       <Page />
   //     </DataContextProvider>
   //   );
+  //
+  // Bên trong Page:
+  //   import { useContext } from "react";
+  //   import { DataContext } from "@refinedev/core";
+  //   import { useList } from "@refinedev/core";
+  //
+  //   const Page = () => {
+  //     const providers = useContext(DataContext); // providers.default === myDataProvider
+  //     const { data, isLoading } = useList({ resource: "posts" }); // hook refine tự lấy provider từ context
+  //     return (
+  //       <div>
+  //         <pre>{JSON.stringify(providers.default.getApiUrl?.(), null, 2)}</pre>
+  //         {isLoading ? "Loading..." : JSON.stringify(data, null, 2)}
+  //       </div>
+  //     );
+  //   };
+  //
+  //   // Giải thích:
+  //   // - useContext(DataContext) đọc giá trị từ Provider gần nhất (phát sóng).
+  //   // - useList là hook refine: tự động gọi dataProvider.getList với resource "posts".
+  //   // - JSX trong return: <div>...</div> là HTML-like; {expression} chèn JS vào JSX.
   //
   // Nếu có nhiều provider:
   //   const providers: DataProviders = {
