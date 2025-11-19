@@ -9,6 +9,187 @@ import { pickDataProvider } from "@definitions/helpers";
 import { getXRay } from "@refinedev/devtools-internal";
 
 // ============================================================================
+// 🪝 WHAT ARE REACT HOOKS? - HOOKS LÀ GÌ?
+// ============================================================================
+
+/**
+ * ❓ QUESTION: "Vậy hook là một function hả?"
+ *
+ * ✅ YES! A hook IS a function, but a SPECIAL kind of function with specific rules.
+ *
+ * **DEFINITION:**
+ * A React Hook is a JavaScript function that:
+ * 1. Lets you "hook into" React features (state, lifecycle, context, etc.)
+ * 2. Can only be called inside React components or other custom hooks
+ * 3. Must follow specific naming conventions and rules
+ *
+ * **HOOK vs REGULAR FUNCTION:**
+ *
+ * ┌────────────────────┬─────────────────┬──────────────────────────┐
+ * │                    │ Regular Function│ React Hook               │
+ * ├────────────────────┼─────────────────┼──────────────────────────┤
+ * │ Is it a function?  │ Yes             │ Yes                      │
+ * │ Naming convention  │ Any name        │ MUST start with "use"    │
+ * │ Where to call?     │ Anywhere        │ Only in components/hooks │
+ * │ Can use state?     │ No              │ Yes (with useState)      │
+ * │ Can use effects?   │ No              │ Yes (with useEffect)     │
+ * │ Order matters?     │ No              │ YES - must be consistent │
+ * └────────────────────┴─────────────────┴──────────────────────────┘
+ *
+ * **EXAMPLE - REGULAR FUNCTION:**
+ *
+ * ```typescript
+ * // This is NOT a hook - just a regular helper function
+ * function formatDate(date: Date): string {
+ *   return date.toISOString();
+ * }
+ *
+ * // Can call anywhere
+ * const result = formatDate(new Date());
+ * ```
+ *
+ * **EXAMPLE - REACT HOOK:**
+ *
+ * ```typescript
+ * // This IS a hook - starts with "use" and uses React features
+ * function useCurrentTime() {
+ *   const [time, setTime] = useState(new Date());  // ← Uses React state
+ *
+ *   useEffect(() => {  // ← Uses React effect
+ *     const timer = setInterval(() => setTime(new Date()), 1000);
+ *     return () => clearInterval(timer);
+ *   }, []);
+ *
+ *   return time;
+ * }
+ *
+ * // Can ONLY call inside components or other hooks
+ * function MyComponent() {
+ *   const time = useCurrentTime();  // ✅ Valid - inside component
+ *   return <div>{time.toISOString()}</div>;
+ * }
+ *
+ * // ❌ CANNOT call outside components
+ * const globalTime = useCurrentTime();  // ❌ Error! Not in a component
+ * ```
+ *
+ * **WHY THE NAME "HOOK"?**
+ *
+ * The word "hook" means to "attach" or "connect" something.
+ * React Hooks let you "hook into" (connect to) React's internal features:
+ *
+ * - `useState` → hooks into state management
+ * - `useEffect` → hooks into component lifecycle
+ * - `useContext` → hooks into React context
+ * - `useCreate` (this file) → hooks into data mutation + notifications + caching
+ *
+ * **THE RULES OF HOOKS:**
+ *
+ * React Hooks have strict rules that MUST be followed:
+ *
+ * 1. ✅ **Only call hooks at the TOP LEVEL**
+ *    - Don't call inside loops, conditions, or nested functions
+ *
+ * ```typescript
+ * function MyComponent() {
+ *   // ✅ CORRECT - at top level
+ *   const [count, setCount] = useState(0);
+ *
+ *   if (someCondition) {
+ *     const [name, setName] = useState("");  // ❌ WRONG - inside condition
+ *   }
+ *
+ *   for (let i = 0; i < 10; i++) {
+ *     const value = useState(i);  // ❌ WRONG - inside loop
+ *   }
+ * }
+ * ```
+ *
+ * 2. ✅ **Only call hooks from React functions**
+ *    - Call from React components (function components)
+ *    - Call from custom hooks (functions starting with "use")
+ *
+ * ```typescript
+ * // ✅ CORRECT - calling from component
+ * function MyComponent() {
+ *   const { mutate } = useCreate();
+ *   return <button onClick={() => mutate({...})}>Create</button>;
+ * }
+ *
+ * // ✅ CORRECT - calling from custom hook
+ * function useMyCustomHook() {
+ *   const { mutate } = useCreate();
+ *   return { createPost: mutate };
+ * }
+ *
+ * // ❌ WRONG - calling from regular function
+ * function regularFunction() {
+ *   const { mutate } = useCreate();  // ❌ Error!
+ * }
+ *
+ * // ❌ WRONG - calling outside any function
+ * const { mutate } = useCreate();  // ❌ Error!
+ * ```
+ *
+ * 3. ✅ **Use the "use" prefix for custom hooks**
+ *
+ * ```typescript
+ * // ✅ CORRECT - starts with "use"
+ * function useUserData() { ... }
+ * function useCreate() { ... }
+ *
+ * // ❌ WRONG - doesn't start with "use" but uses hooks inside
+ * function getUserData() {
+ *   const [data] = useState();  // ❌ Breaks rules!
+ * }
+ * ```
+ *
+ * **TYPES OF HOOKS:**
+ *
+ * 1. **Built-in React Hooks** (from React library)
+ *    - useState, useEffect, useContext, useRef, useMemo, useCallback, etc.
+ *
+ * 2. **Third-party Hooks** (from libraries)
+ *    - useMutation (React Query) ← this file uses it
+ *    - useQuery (React Query)
+ *
+ * 3. **Custom Hooks** (you create them)
+ *    - useCreate ← THIS FILE! 🎯
+ *    - useUpdate, useDelete, etc.
+ *
+ * **THIS FILE (useCreate) IS A CUSTOM HOOK THAT:**
+ *
+ * ```typescript
+ * export const useCreate = (...) => {
+ *   // Uses other hooks inside
+ *   const dataProvider = useDataProvider();      // ← Hook
+ *   const invalidateStore = useInvalidate();     // ← Hook
+ *   const translate = useTranslate();            // ← Hook
+ *   const mutation = useMutation({ ... });       // ← Hook
+ *
+ *   // Returns data and functions
+ *   return {
+ *     mutate: mutation.mutate,
+ *     isPending: mutation.isPending,
+ *     // ... more properties
+ *   };
+ * };
+ * ```
+ *
+ * **SUMMARY:**
+ *
+ * - ✅ Hooks ARE functions
+ * - ✅ But they're SPECIAL functions with rules
+ * - ✅ They let you use React features without classes
+ * - ✅ They must start with "use"
+ * - ✅ They can only be called in components or other hooks
+ * - ✅ `useCreate` is a custom hook that wraps `useMutation` and adds Refine features
+ *
+ * Before hooks (React < 16.8), you needed class components for state.
+ * With hooks (React >= 16.8), you can use state in function components! 🎉
+ */
+
+// ============================================================================
 // 📚 REACT QUERY MUTATIONS - KHÁI NIỆM QUAN TRỌNG
 // ============================================================================
 
