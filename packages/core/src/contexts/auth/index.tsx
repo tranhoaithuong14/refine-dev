@@ -11,6 +11,13 @@
 // - PropsWithChildren<T> = thêm sẵn prop "children" cho kiểu props T.
 // - React.FC<Props> = Function Component, nhận props kiểu Props và tự thêm children.
 // - JSX = cú pháp HTML trong JS, ví dụ: <AuthProviderContext.Provider value={...}>{children}</AuthProviderContext.Provider>
+// - unknown: kiểu “an toàn” nhất trong TS, buộc bạn kiểm tra/convert trước khi dùng. Ở đây params: unknown vì người dùng tự quyết định shape.
+// - Promise: đối tượng đại diện cho giá trị bất đồng bộ. Promise.resolve(x) chuẩn hóa x thành Promise; Promise.reject(err) trả về Promise ở trạng thái rejected.
+//   * Ví dụ rejected: Promise.reject(new Error("Bad")); // có state "rejected" + reason = Error("Bad"). Khi await sẽ throw error này.
+// - as: type assertion (ép kiểu) cho TS biết giá trị phù hợp type mong đợi, không đổi runtime.
+//   * "signature" = dạng hàm/kiểu tham số + kiểu trả về. VD: type LoginSig = (p: LoginParams) => Promise<void>.
+//   * Ví dụ: const f = (x: unknown) => x; const g = f as (x: number) => number; // nói với TS rằng f tuân thủ chữ ký (signature) đó.
+// - optional chaining (?.): gọi hàm/đọc property nếu tồn tại, nếu không sẽ trả undefined thay vì throw.
 //
 // 🎯 Business logic & lý do thiết kế:
 // - Auth provider là “cấu hình” ít thay đổi (các hàm login/logout/check...). Context phù hợp vì phát 1 lần, hook khác dễ truy cập.
@@ -48,6 +55,10 @@ export const AuthProviderContext = React.createContext<Partial<IAuthContext>>(
 // - Props: toàn bộ IAuthContext + children (nhờ PropsWithChildren).
 // - isProvided: flag cho biết app đã cấu hình auth provider hay chưa.
 //   + Nếu isProvided=false, Refine hiểu chưa có auth provider → có thể bỏ qua auth hooks.
+// - Vì sao dùng cả PropsWithChildren lẫn React.FC?
+//   * React.FC tự động cho phép prop children?: ReactNode.
+//   * PropsWithChildren<IAuthContext> cũng thêm children vào IAuthContext.
+//   * Dùng kết hợp để đảm bảo TypeScript hiểu rõ children tồn tại, dù một trong hai đã đủ; cách này thiên về “tường minh” cho người đọc mới.
 // ----------------------------------------------------------------------------
 export const AuthProviderContextProvider: React.FC<
   PropsWithChildren<IAuthContext>
@@ -68,6 +79,8 @@ export const AuthProviderContextProvider: React.FC<
         "Unhandled Error in login: refine always expects a resolved promise.",
         error,
       );
+      // Promise.reject: tạo Promise ở trạng thái "rejected", thuộc tính quan trọng: [[PromiseState]]="rejected", [[PromiseResult]]=error.
+      // Khi caller await, error sẽ bị throw; khi caller .catch, error sẽ được truyền vào callback catch.
       return Promise.reject(error);
     }
   };
@@ -82,7 +95,7 @@ export const AuthProviderContextProvider: React.FC<
         "Unhandled Error in register: refine always expects a resolved promise.",
         error,
       );
-      return Promise.reject(error);
+      return Promise.reject(error); // Chuẩn hóa thành Promise rejected với reason=error (thường là Error instance).
     }
   };
 
@@ -96,7 +109,7 @@ export const AuthProviderContextProvider: React.FC<
         "Unhandled Error in logout: refine always expects a resolved promise.",
         error,
       );
-      return Promise.reject(error);
+      return Promise.reject(error); // rejected Promise; await sẽ throw, .catch sẽ nhận error.
     }
   };
 
@@ -108,13 +121,13 @@ export const AuthProviderContextProvider: React.FC<
     try {
       const result = await authProvider.check?.(params);
 
-      return Promise.resolve(result);
+      return Promise.resolve(result); // Promise.resolve: đảm bảo trả Promise kể cả khi provider trả sync value.
     } catch (error) {
       console.warn(
         "Unhandled Error in check: refine always expects a resolved promise.",
         error,
       );
-      return Promise.reject(error);
+      return Promise.reject(error); // rejected Promise với reason=error.
     }
   };
 
@@ -122,26 +135,26 @@ export const AuthProviderContextProvider: React.FC<
     try {
       const result = await authProvider.forgotPassword?.(params);
 
-      return Promise.resolve(result);
+      return Promise.resolve(result); // Chuẩn hóa thành Promise resolved.
     } catch (error) {
       console.warn(
         "Unhandled Error in forgotPassword: refine always expects a resolved promise.",
         error,
       );
-      return Promise.reject(error);
+      return Promise.reject(error); // reason=error.
     }
   };
 
   const handleUpdatePassword = async (params: unknown) => {
     try {
       const result = await authProvider.updatePassword?.(params);
-      return Promise.resolve(result);
+      return Promise.resolve(result); // Chuẩn hóa: luôn Promise.
     } catch (error) {
       console.warn(
         "Unhandled Error in updatePassword: refine always expects a resolved promise.",
         error,
       );
-      return Promise.reject(error);
+      return Promise.reject(error); // reason=error.
     }
   };
 
@@ -150,6 +163,7 @@ export const AuthProviderContextProvider: React.FC<
       value={{
         ...authProvider,
         // Ghi đè các method bằng version đã bọc try/catch để an toàn hơn
+        // "as" ép kiểu cho TS hiểu đúng "chữ ký" hàm (tham số + kiểu trả về) trùng với IAuthContext.
         login: handleLogin as IAuthContext["login"],
         logout: handleLogout as IAuthContext["logout"],
         check: handleCheck as IAuthContext["check"],
