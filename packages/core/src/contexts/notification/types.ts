@@ -4,10 +4,35 @@ export type SuccessErrorNotification<
   TVariables = unknown,
 > = {
   /**
-     * Success notification configuration to be displayed when the mutation is successful.
-     * @default '"There was an error creating resource (status code: `statusCode`)" or "Error when updating resource (status code: statusCode)"'
-
-     */
+   * Success notification configuration to be displayed when the mutation is successful.
+   *
+   * It supports 3 types of values:
+   * 1. **Object**: Static configuration (e.g., `{ message: "Success", type: "success" }`).
+   * 2. **Boolean (`false`)**: Disables the notification.
+   * 3. **Function**: Dynamic configuration based on the response data, input values, or resource name.
+   *
+   * @default Default success message from Refine.
+   *
+   * @example
+   * // 1. Object - Static message
+   * successNotification: {
+   *   message: "Post created",
+   *   description: "The post has been successfully created.",
+   *   type: "success",
+   * }
+   *
+   * @example
+   * // 2. Boolean - Disable notification
+   * successNotification: false
+   *
+   * @example
+   * // 3. Function - Dynamic message based on response
+   * successNotification: (data, values, resource) => ({
+   *   message: `Post ${data.title} created`,
+   *   description: "Success",
+   *   type: "success",
+   * })
+   */
   successNotification?:
     | OpenNotificationParams
     | false
@@ -18,7 +43,33 @@ export type SuccessErrorNotification<
       ) => OpenNotificationParams | false | undefined);
   /**
    * Error notification configuration to be displayed when the mutation fails.
-   * @default '"There was an error creating resource (status code: `statusCode`)" or "Error when updating resource (status code: statusCode)"'
+   *
+   * It supports 3 types of values:
+   * 1. **Object**: Static configuration (e.g., `{ message: "Error", type: "error" }`).
+   * 2. **Boolean (`false`)**: Disables the notification.
+   * 3. **Function**: Dynamic configuration based on the error, input values, or resource name.
+   *
+   * @default Default error message from Refine.
+   *
+   * @example
+   * // 1. Object - Static message
+   * errorNotification: {
+   *   message: "Error",
+   *   description: "Something went wrong",
+   *   type: "error",
+   * }
+   *
+   * @example
+   * // 2. Boolean - Disable notification
+   * errorNotification: false
+   *
+   * @example
+   * // 3. Function - Dynamic message based on error
+   * errorNotification: (error, values, resource) => ({
+   *   message: `Error: ${error.message}`,
+   *   description: "Please try again",
+   *   type: "error",
+   * })
    */
   errorNotification?:
     | OpenNotificationParams
