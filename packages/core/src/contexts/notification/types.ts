@@ -81,12 +81,82 @@ export type SuccessErrorNotification<
       ) => OpenNotificationParams | false | undefined);
 };
 
+/**
+ * Parameters for opening a notification in Refine.
+ *
+ * This type defines the structure for notification configurations used throughout the framework.
+ * It's used by the notification provider to display messages to users.
+ *
+ * @example
+ * // Basic success notification
+ * const params: OpenNotificationParams = {
+ *   message: "Operation successful",
+ *   type: "success",
+ * };
+ *
+ * @example
+ * // Detailed error notification
+ * const params: OpenNotificationParams = {
+ *   key: "create-post-error",
+ *   message: "Failed to create post",
+ *   description: "Please check your input and try again",
+ *   type: "error",
+ * };
+ *
+ * @example
+ * // Undoable notification with progress
+ * const params: OpenNotificationParams = {
+ *   key: "delete-post",
+ *   message: "Post will be deleted",
+ *   type: "progress",
+ *   undoableTimeout: 5000,
+ *   cancelMutation: () => console.log("Deletion cancelled"),
+ * };
+ */
 export type OpenNotificationParams = {
+  /**
+   * Unique identifier for the notification.
+   * Used to manage notification lifecycle (e.g., closing specific notifications).
+   *
+   * @optional
+   */
   key?: string;
+  /**
+   * The main message text to display in the notification.
+   *
+   * @required
+   */
   message: string;
+  /**
+   * The type of notification, which determines the visual style and icon.
+   * - `"success"`: Indicates a successful operation (e.g., create, update).
+   * - `"error"`: Indicates a failed operation.
+   * - `"progress"`: Indicates an ongoing undoable operation.
+   *
+   * @required
+   */
   type: "success" | "error" | "progress";
+  /**
+   * Additional details or context for the notification.
+   * Typically displayed below the main message.
+   *
+   * @optional
+   */
   description?: string;
+  /**
+   * Callback function to cancel an undoable mutation.
+   * Used with `type: "progress"` for operations that can be undone.
+   *
+   * @optional
+   */
   cancelMutation?: () => void;
+  /**
+   * Timeout duration (in milliseconds) for undoable operations.
+   * After this time, the mutation will be executed automatically.
+   *
+   * @optional
+   * @default 5000
+   */
   undoableTimeout?: number;
 };
 
