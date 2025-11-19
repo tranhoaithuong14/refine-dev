@@ -89,7 +89,13 @@ type Props = PropsWithChildren<{
 //   * Có thể truyền prop manual xuống từng component, nhưng rườm rà và khó bảo trì.
 //   * Redux/Zustand cũng được, nhưng Context đơn giản đủ cho cấu hình provider.
 // - Phù hợp/sở trường:
-//   * Context thích hợp cho giá trị cấu hình ít thay đổi (data provider là cấu hình).
+//   * Context thích hợp cho giá trị cấu hình ít thay đổi.
+//     - "Cấu hình" ở đây nghĩa là tham chiếu đến object định nghĩa cách gọi backend (data provider),
+//       thường khởi tạo 1 lần khi app start và hiếm khi đổi.
+//     - Tiêu chuẩn nhận biết: không phụ thuộc UI momentary state, không đổi theo mỗi render,
+//       chỉ đổi khi bạn cố tình gán provider khác (VD: vào trang admin/analytics đặc biệt).
+//     - Vì ít đổi, Context phát 1 lần rồi reuse; nếu giá trị đổi liên tục thì Context không phù hợp.
+//     - Nếu cần thay đổi tạm thời cho 1 subtree, có thể bọc Provider khác riêng cho subtree đó.
 //   * Khi cần override theo scope nhỏ (VD: 1 trang dùng provider khác), chỉ cần lồng Provider.
 // - Đây có phải “tốt nhất”?
 //   * Là giải pháp thực dụng và chuẩn React cho “dependency injection” nhẹ.
