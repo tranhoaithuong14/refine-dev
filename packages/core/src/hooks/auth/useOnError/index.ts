@@ -224,6 +224,103 @@ export function useOnError(): UseOnErrorReturnType {
   /**
    * Create a React Query mutation for error checking.
    *
+   * **❓ WHY USE REACT QUERY FOR ERROR CHECKING?**
+   *
+   * You might wonder: "Why not just call authProvider.onError() directly?"
+   *
+   * React Query provides critical infrastructure:
+   *
+   * 1. **State Management:**
+   *    - `isPending` - Know when error check is in progress
+   *    - `isSuccess` - Know when check completed
+   *    - `isError` - Know if check itself failed
+   *
+   * 2. **Error Handling:**
+   *    - If authProvider.onError throws an error, React Query catches it
+   *    - Provides retry logic if needed
+   *
+   * 3. **DevTools Integration:**
+   *    - Track all auth operations in React Query DevTools
+   *    - Debug mutation history and states
+   *
+   * 4. **Consistency:**
+   *    - All Refine operations (useCreate, useUpdate, useLogout, etc.) use React Query
+   *    - Same API pattern across the framework
+   *
+   * **❓ WHY IS authProvider.onError ASYNC?**
+   *
+   * Simple examples only check `error.status`, but real-world apps need async:
+   *
+   * **Use Case 1: Token Refresh**
+   * ```typescript
+   * onError: async (error) => {
+   *   if (error.status === 401) {
+   *     // ← ASYNC: Call API to refresh token
+   *     const newToken = await refreshToken();
+   *     if (newToken) return {}; // No logout needed
+   *     return { logout: true }; // Refresh failed
+   *   }
+   * }
+   * ```
+   *
+   * **Use Case 2: Error Logging**
+   * ```typescript
+   * onError: async (error) => {
+   *   // ← ASYNC: Send error to logging service
+   *   await logErrorToServer(error);
+   *   return { logout: error.status === 401 };
+   * }
+   * ```
+   *
+   * **Use Case 3: Permission Check**
+   * ```typescript
+   * onError: async (error) => {
+   *   if (error.status === 403) {
+   *     // ← ASYNC: Fetch latest permissions from server
+   *     const canRetry = await checkUserPermission();
+   *     return canRetry ? {} : { redirectTo: '/forbidden' };
+   *   }
+   * }
+   * ```
+   *
+   * **Use Case 4: User Confirmation**
+   * ```typescript
+   * onError: async (error) => {
+   *   if (error.status === 401) {
+   *     // ← ASYNC: Show dialog and wait for user response
+   *     const confirmed = await showDialog('Session expired. Logout?');
+   *     return confirmed ? { logout: true } : {};
+   *   }
+   * }
+   * ```
+   *
+   * **ARCHITECTURE PATTERN:**
+   *
+   * This follows the **Strategy Pattern**:
+   * - Framework provides infrastructure (React Query wrapper)
+   * - You provide business logic (authProvider.onError)
+   * - Framework executes your logic and handles results automatically
+   *
+   * ```
+   * ┌─────────────────────────────────────────────┐
+   * │  YOU: Define onError in authProvider        │
+   * │  ↓ (Your business logic - sync or async)    │
+   * └─────────────────────────────────────────────┘
+   *                    ↓ injected via context
+   * ┌─────────────────────────────────────────────┐
+   * │  REFINE: Wraps in React Query mutation      │
+   * │  - Adds state management (loading, success) │
+   * │  - Handles logout/redirect automatically    │
+   * │  - Integrates DevTools                      │
+   * └─────────────────────────────────────────────┘
+   *                    ↓ exports hook
+   * ┌─────────────────────────────────────────────┐
+   * │  YOUR COMPONENTS: Use simple API            │
+   * │  const { mutate: checkError } = useOnError()│
+   * │  checkError(error); ← Just call it!         │
+   * └─────────────────────────────────────────────┘
+   * ```
+   *
    * **MUTATION CONFIGURATION:**
    *
    * This uses conditional logic:
@@ -291,183 +388,100 @@ export function useOnError(): UseOnErrorReturnType {
           // ====================================================================
 
           /**
-           * mutationFn: The function to execute when checkError() is called
+           * mutationFn: The CORE business logic to execute when checkError() is called
            *
-           * **JAVASCRIPT/TYPESCRIPT SYNTAX EXPLANATION:**
+           * **WHAT IS mutationFn?**
            *
-           * This line: `mutationFn: onErrorFromContext,`
+           * In React Query, `mutationFn` is the ACTUAL FUNCTION that executes your logic.
+           * Everything else (isPending, isSuccess, etc.) are just wrappers around it.
            *
-           * This is assigning a FUNCTION as a value to an object property.
-           *
-           * **BREAKDOWN:**
-           *
-           * In JavaScript/TypeScript, functions are "first-class citizens",
-           * meaning they can be:
-           * 1. ✅ Assigned to variables
-           * 2. ✅ Passed as arguments
-           * 3. ✅ Returned from functions
-           * 4. ✅ Stored in objects (← THIS CASE!)
-           *
-           * **WHAT IS HAPPENING HERE:**
+           * **THE FLOW:**
            *
            * ```typescript
-           * {
-           *   mutationFn: onErrorFromContext
-           *   ^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^
-           *   Property    Function value
-           *   name        (reference to a function)
-           * }
+           * checkError(error)
+           *     ↓
+           * React Query calls: mutationFn(error)
+           *     ↓
+           * Which is: onErrorFromContext(error)
+           *     ↓
+           * Which is: authProvider.onError(error)  ← YOUR CODE RUNS HERE!
+           *     ↓
+           * Returns: { logout?: boolean, redirectTo?: string }
+           *     ↓
+           * onSuccess handler processes the result
            * ```
            *
-           * This is the same as:
+           * **WHY NOT CALL IT DIRECTLY?**
            *
            * ```typescript
-           * // LONGHAND VERSION (more explicit):
-           * {
-           *   mutationFn: function(error) {
-           *     return onErrorFromContext(error);
-           *   }
-           * }
+           * // ❌ Without React Query:
+           * const checkError = (error) => {
+           *   const result = onErrorFromContext(error);
+           *   // Now what? No loading state, no error handling...
+           * };
            *
-           * // Or with arrow function:
-           * {
-           *   mutationFn: (error) => onErrorFromContext(error)
-           * }
-           *
-           * // SHORTHAND VERSION (what we're using):
-           * {
-           *   mutationFn: onErrorFromContext
-           * }
+           * // ✅ With React Query:
+           * const mutation = useMutation({
+           *   mutationFn: onErrorFromContext  // ← Pass the function reference
+           * });
+           * // Now you get: isPending, isSuccess, isError, retry, DevTools, etc.
            * ```
            *
-           * **WHY IS SHORTHAND VALID?**
-           *
-           * When you write `mutationFn: onErrorFromContext`, you're saying:
-           * "Use the function that onErrorFromContext refers to"
-           *
-           * It's like passing a reference (pointer) to the function,
-           * not calling the function immediately.
-           *
-           * **IMPORTANT DIFFERENCE:**
+           * **SYNTAX NOTE:**
            *
            * ```typescript
-           * mutationFn: onErrorFromContext      // ✅ CORRECT - pass the function
-           * mutationFn: onErrorFromContext()    // ❌ WRONG - call the function NOW
+           * mutationFn: onErrorFromContext      // ✅ Pass function reference
+           * mutationFn: onErrorFromContext()    // ❌ Call it NOW (wrong!)
            * ```
            *
-           * Without `()`: Pass the function itself (React Query will call it later)
-           * With `()`: Call the function immediately and pass the result
-           *
-           * **ANALOGY:**
-           *
-           * Think of it like giving someone a phone number vs calling them:
-           *
-           * ```typescript
-           * // Giving someone the phone number (they can call later)
-           * contact: phoneNumber        // ← Like: mutationFn: onErrorFromContext
-           *
-           * // Calling them RIGHT NOW and giving the result
-           * contact: phoneNumber()      // ← Like: mutationFn: onErrorFromContext()
-           * ```
+           * No `()` = pass the function (React Query calls it later)
+           * With `()` = call it now and pass the result (not what we want)
            *
            * **WHERE DOES onErrorFromContext COME FROM?**
            *
-           * Earlier in the code (line 192):
-           * ```typescript
-           * const { onError: onErrorFromContext } = useAuthProviderContext();
-           * ```
+           * From line 200: `const { onError: onErrorFromContext } = useAuthProviderContext();`
            *
-           * This gets the `onError` function from your authProvider:
+           * This gets YOUR authProvider.onError function:
            * ```typescript
            * const authProvider = {
-           *   onError: async (error) => {
-           *     // This is the actual function!
-           *     if (error.statusCode === 401) {
-           *       return { logout: true };
-           *     }
+           *   onError: async (error) => {  // ← This function!
+           *     if (error.status === 401) return { logout: true };
            *     return {};
            *   }
            * };
            * ```
            *
-           * So `onErrorFromContext` is a REFERENCE to that function.
-           *
-           * **WHAT WILL HAPPEN:**
-           *
-           * When you call `checkError(myError)`:
-           * 1. React Query receives the error
-           * 2. React Query calls mutationFn(myError)
-           * 3. Since mutationFn = onErrorFromContext
-           * 4. It's actually calling YOUR authProvider.onError(myError)
-           * 5. Your function processes the error and returns { logout?: boolean, redirectTo?: string }
-           *
-           * **COMPLETE EXAMPLE TO CLARIFY:**
+           * **REAL-WORLD EXAMPLE:**
            *
            * ```typescript
-           * // Step 1: You define authProvider
+           * // 1. You define:
            * const authProvider = {
            *   onError: async (error) => {
-           *     console.log("Checking error:", error);
-           *     return { logout: true };
+           *     console.log("Checking:", error);
+           *     if (error.status === 401) {
+           *       const refreshed = await tryRefreshToken();
+           *       return refreshed ? {} : { logout: true };
+           *     }
+           *     return {};
            *   }
            * };
            *
-           * // Step 2: Refine stores it in context
-           * // (happens internally)
+           * // 2. You use:
+           * const { mutate: checkError, isPending } = useOnError();
+           * checkError(myError);  // ← Triggers YOUR authProvider.onError
            *
-           * // Step 3: useOnError gets it from context
-           * const { onError: onErrorFromContext } = useAuthProviderContext();
-           * // Now onErrorFromContext refers to YOUR authProvider.onError function
-           *
-           * // Step 4: Assign it to mutationFn
-           * const mutation = useMutation({
-           *   mutationFn: onErrorFromContext  // Reference to YOUR function
-           * });
-           *
-           * // Step 5: When you call checkError
-           * const { mutate: checkError } = useOnError();
-           * checkError(someError);
-           *
-           * // Step 6: React Query internally does:
-           * mutationFn(someError)
-           * // Which is the same as:
-           * onErrorFromContext(someError)
-           * // Which calls:
-           * authProvider.onError(someError)
-           * // And logs: "Checking error: someError"
-           * ```
-           *
-           * **ANOTHER EXAMPLE WITH REGULAR OBJECTS:**
-           *
-           * ```typescript
-           * // Define a function
-           * function sayHello(name) {
-           *   return `Hello, ${name}!`;
-           * }
-           *
-           * // Store it in an object
-           * const actions = {
-           *   greet: sayHello  // ← Same pattern as mutationFn: onErrorFromContext
-           * };
-           *
-           * // Later, call it
-           * console.log(actions.greet("Alice"));  // "Hello, Alice!"
+           * // 3. Behind the scenes:
+           * // React Query calls: authProvider.onError(myError)
+           * // Logs: "Checking: myError"
+           * // Tries to refresh token
+           * // Returns result → onSuccess processes it
            * ```
            *
            * **SUMMARY:**
            *
-           * `mutationFn: onErrorFromContext` means:
-           * - ✅ Create an object property called `mutationFn`
-           * - ✅ Its value is a REFERENCE to the function `onErrorFromContext`
-           * - ✅ NOT calling the function (no parentheses)
-           * - ✅ React Query will call this function later when needed
-           * - ✅ `onErrorFromContext` is YOUR authProvider.onError function
-           *
-           * This is YOUR authProvider.onError function.
-           * It receives the error and returns:
-           * - { logout: true } → should logout
-           * - { redirectTo: "/path" } → where to redirect
-           * - {} → do nothing special
+           * - `mutationFn` = The function React Query will execute
+           * - `onErrorFromContext` = Reference to YOUR authProvider.onError
+           * - When mutation runs → YOUR logic executes with React Query's infrastructure
            */
           mutationFn: onErrorFromContext,
 
@@ -680,7 +694,7 @@ export function useOnError(): UseOnErrorReturnType {
    * const { mutate: checkError } = useOnError();
    * //      ^^^^^^  ^^^^^^^^^^
    * //      Extract  Give it a new name
-   * //              
+   * //
    * //      Now you have `checkError` variable (NOT `mutate`)
    * ```
    *
