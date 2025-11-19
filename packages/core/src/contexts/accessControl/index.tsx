@@ -20,9 +20,9 @@ import type {
   IAccessControlContext,
   IAccessControlContextReturnType,
 } from "./types";
-// IAccessControlContext: suy luận dựa vào code => có thể chứa { can, options }.
-// IAccessControlContextReturnType: type của giá trị context cung cấp cho consumer.
-// Dù chưa mở file types.ts, ta đoán: can = hàm check quyền, options = config (buttons, queryOptions...).
+// Theo types.ts:
+// - IAccessControlContext: props mà Provider nhận (có thể gồm { can?: CanFunction; options?: AccessControlOptions }).
+// - IAccessControlContextReturnType: hình dạng giá trị context phát ra (can + options với buttons/queryOptions đã chuẩn hóa).
 
 // ----------------------------------------------------------------------------
 // createContext: tạo ra Context object.
@@ -63,16 +63,16 @@ export const AccessControlContextProvider: React.FC<
         // ta luôn có cấu trúc buttons + queryOptions đúng chuẩn và giá trị mặc định an toàn.
         options: options
           ? {
-              // Nếu người dùng truyền options: dùng spread để copy mọi field.
+              // Nếu người dùng truyền options: dùng spread để copy mọi field (được định nghĩa trong types.ts).
               ...options,
               buttons: {
-                // Ép enableAccessControl luôn true: có nghĩa là hệ thống access control được bật.
-                // (Người dùng có thể tắt? Ở đây ta đảm bảo provider cấp ra true để tránh nút bỏ qua check.)
+                // Đặt default enableAccessControl = true (bật cơ chế kiểm tra quyền cho buttons).
+                // Nếu người dùng truyền options.buttons.enableAccessControl = false thì spread bên dưới sẽ override.
                 enableAccessControl: true,
-                // hideIfUnauthorized=false => mặc định không ẩn button khi user không có quyền,
-                // thay vào đó có thể disable hoặc hiển thị message. Người dùng có thể override bằng options.buttons.
+                // Default hideIfUnauthorized = false (không ẩn nút khi thiếu quyền, thay vào đó có thể disable).
+                // Người dùng có thể set true để nút biến mất khi không đủ quyền.
                 hideIfUnauthorized: false,
-                // ...options.buttons: nếu user truyền { hideIfUnauthorized: true } sẽ override giá trị trên.
+                // ...options.buttons: override các default ở trên nếu người dùng truyền vào.
                 ...options.buttons,
               },
             }
@@ -81,6 +81,9 @@ export const AccessControlContextProvider: React.FC<
               buttons: {
                 enableAccessControl: true,
                 hideIfUnauthorized: false,
+                // Ý nghĩa theo types.ts:
+                // - enableAccessControl: bật/tắt kiểm tra quyền cho buttons. true = mỗi nút sẽ gọi hàm "can" trước khi render/enable.
+                // - hideIfUnauthorized: true = ẩn hoàn toàn nút nếu user không có quyền; false = nút vẫn hiện (có thể disabled/tooltip).
               },
               // queryOptions: undefined → Placeholder cho các config fetch quyền (nếu có).
               // Giữ undefined để consumer biết "chưa cấu hình".
