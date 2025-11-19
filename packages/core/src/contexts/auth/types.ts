@@ -143,13 +143,19 @@ export interface IAuthContext extends Partial<AuthProvider> {
 
 // ----------------------------------------------------------------------------
 // 📦 Các kiểu trả về chuẩn hoá cho hooks
-// - Áp dụng cho các hook auth (useLogin, useLogout, useRegister, useForgotPassword, useUpdatePassword).
-// - Ý nghĩa giá trị:
-//   * void: hành động mặc định tiếp tục (VD: redirect theo cấu hình).
-//   * false: chặn hành động mặc định (thường để không redirect).
-//   * string: URL để redirect tùy chỉnh.
-//   * object (chỉ ở login): payload bổ sung (token, user metadata, ...).
-// - Refine đọc kết quả này để quyết định redirect hay dừng lại.
+// - DÙNG ĐỂ: các hook auth của Refine (useLogin/useLogout/useRegister/useForgotPassword/useUpdatePassword)
+//   đọc kết quả và quyết định redirect hay dừng hành động mặc định.
+// - Vì sao tồn tại? Chuẩn hoá kiểu trả về để developer có 3 lựa chọn kiểm soát luồng:
+//   1) void: chấp nhận hành vi mặc định (Refine tự redirect theo cấu hình).
+//   2) false: chặn hành vi mặc định (không redirect, không thông báo).
+//   3) string: buộc redirect tới URL cụ thể.
+//   4) object (chỉ với TLoginData): trả thêm token/metadata cho client tự dùng.
+// - Ví dụ:
+//   const onLogin = async () => "/dashboard";            // redirect tới /dashboard
+//   const onLogout = async () => false;                  // không redirect sau logout
+//   const onRegister = async () => undefined;           // dùng redirect mặc định
+//   const onForgotPassword = async () => "/reset-sent"; // redirect custom
+//   const onLoginWithToken = async () => ({ token: "abc" }); // tự handle token, Refine không redirect nếu bạn chặn
 // ----------------------------------------------------------------------------
 export type TLogoutData = void | false | string;
 export type TLoginData = void | false | string | object;
