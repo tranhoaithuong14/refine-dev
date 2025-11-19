@@ -28,7 +28,16 @@ import type { IAuthContext } from "./types";
 
 // ----------------------------------------------------------------------------
 // 📡 AuthProviderContext - Context chia sẻ Partial<IAuthContext>
-// - Partial<IAuthContext>: cho phép thiếu một số method (optional) thay vì bắt buộc đủ.
+// - Partial<IAuthContext>: Utility type của TypeScript biến T thành tất cả optional.
+//   Tức là các hàm login/logout/check... có thể có hoặc không, tránh TS báo lỗi.
+// - IAuthContext: interface định nghĩa hợp đồng auth của Refine (login, logout, check,
+//   register, forgotPassword, updatePassword, isProvided). Xem ./types.ts để biết chi tiết.
+//   Ví dụ tối giản IAuthContext: {
+//     login: (params) => Promise.resolve(),
+//     logout: () => Promise.resolve(),
+//     check: () => Promise.resolve({ authenticated: true }),
+//     isProvided: true
+//   }
 // ----------------------------------------------------------------------------
 export const AuthProviderContext = React.createContext<Partial<IAuthContext>>(
   {},
@@ -38,6 +47,7 @@ export const AuthProviderContext = React.createContext<Partial<IAuthContext>>(
 // 🏗️ AuthProviderContextProvider - “anten” phát auth provider xuống cây con
 // - Props: toàn bộ IAuthContext + children (nhờ PropsWithChildren).
 // - isProvided: flag cho biết app đã cấu hình auth provider hay chưa.
+//   + Nếu isProvided=false, Refine hiểu chưa có auth provider → có thể bỏ qua auth hooks.
 // ----------------------------------------------------------------------------
 export const AuthProviderContextProvider: React.FC<
   PropsWithChildren<IAuthContext>
@@ -46,6 +56,7 @@ export const AuthProviderContextProvider: React.FC<
   // - try/catch: log cảnh báo nếu provider ném lỗi không được xử lý.
   // - luôn trả Promise.resolve/reject rõ ràng (Refine kỳ vọng Promise).
   // - chấp nhận params: unknown (do người dùng định nghĩa).
+  // - Nếu authProvider không implement method đó, dấu ? sẽ bỏ qua (optional chaining).
 
   const handleLogin = async (params: unknown) => {
     try {
@@ -88,6 +99,10 @@ export const AuthProviderContextProvider: React.FC<
       return Promise.reject(error);
     }
   };
+
+  // --- Lý do dùng Promise.resolve ở check/forgotPassword/updatePassword ---
+  // Một số provider có thể trả về giá trị non-promise; Promise.resolve(result) giúp
+  // chuẩn hóa thành Promise, giữ API ổn định cho toàn bộ hook Refine.
 
   const handleCheck = async (params: unknown) => {
     try {
@@ -153,6 +168,12 @@ export const AuthProviderContextProvider: React.FC<
 // 🎣 useAuthProviderContext - Hook tiện lợi để đọc Context
 // - Dùng trong component/hook khác: const auth = useAuthProviderContext();
 // - Nếu ngoài Provider, giá trị rỗng {} (vì default trong createContext).
+// - Ví dụ dùng:
+//   const Profile = () => {
+//     const { check, logout } = useAuthProviderContext();
+//     React.useEffect(() => { check?.(); }, [check]);
+//     return <button onClick={() => logout?.()}>Thoát</button>;
+//   };
 // ----------------------------------------------------------------------------
 export const useAuthProviderContext = () => {
   const context = React.useContext(AuthProviderContext);
