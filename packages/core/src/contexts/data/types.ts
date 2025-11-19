@@ -1674,6 +1674,30 @@ export interface DeleteManyResponse<TData = BaseRecord> {
   data: TData[];
 }
 
+// ============================================================================
+// PHẦN 8: REQUEST PARAM TYPES - THAM SỐ GỬI VÀO DATA PROVIDER
+// ============================================================================
+
+/**
+ * 📥 GetListParams - Tham số cho getList (lấy danh sách)
+ *
+ * {
+ *   resource: string;          // Tên resource, VD: "posts"
+ *   pagination?: Pagination;   // Phân trang (page/size hoặc cursor)
+ *   sorters?: CrudSort[];      // Sắp xếp
+ *   filters?: CrudFilter[];    // Bộ lọc tìm kiếm
+ *   meta?: MetaQuery;          // Metadata tùy chỉnh (headers, gqlQuery,...)
+ *   dataProviderName?: string; // Dùng multi-provider (tùy chọn)
+ * }
+ *
+ * VD: dataProvider.getList({
+ *   resource: "posts",
+ *   pagination: { current: 1, pageSize: 10 },
+ *   sorters: [{ field: "createdAt", order: "desc" }],
+ *   filters: [{ field: "status", operator: "eq", value: "published" }],
+ *   meta: { headers: { "X-Token": "abc" } }
+ * });
+ */
 export interface GetListParams {
   resource: string;
   pagination?: Pagination;
@@ -1683,6 +1707,12 @@ export interface GetListParams {
   dataProviderName?: string;
 }
 
+/**
+ * 📥 GetManyParams - Tham số cho getMany (lấy nhiều record theo id)
+ *
+ * DÙNG KHI: Cần fetch nhiều id cụ thể trong 1 lần gọi.
+ * VD: ids: [1, 2, 3] → 1 request thay vì 3.
+ */
 export interface GetManyParams {
   resource: string;
   ids: BaseKey[];
@@ -1690,24 +1720,40 @@ export interface GetManyParams {
   dataProviderName?: string;
 }
 
+/**
+ * 📥 GetOneParams - Tham số cho getOne (lấy đúng 1 record)
+ */
 export interface GetOneParams {
   resource: string;
   id: BaseKey;
   meta?: MetaQuery;
 }
 
+/**
+ * ✍️ CreateParams - Tham số cho create (tạo record)
+ *
+ * TVariables = payload gửi lên server.
+ */
 export interface CreateParams<TVariables = {}> {
   resource: string;
   variables: TVariables;
   meta?: MetaQuery;
 }
 
+/**
+ * ✍️➕ CreateManyParams - Tham số cho createMany (tạo nhiều record)
+ */
 export interface CreateManyParams<TVariables = {}> {
   resource: string;
   variables: TVariables[];
   meta?: MetaQuery;
 }
 
+/**
+ * 🛠 UpdateParams - Tham số cho update (cập nhật 1 record)
+ *
+ * LƯU Ý: id bắt buộc, variables chứa payload update.
+ */
 export interface UpdateParams<TVariables = {}> {
   resource: string;
   id: BaseKey;
@@ -1715,6 +1761,9 @@ export interface UpdateParams<TVariables = {}> {
   meta?: MetaQuery;
 }
 
+/**
+ * 🛠🛠 UpdateManyParams - Tham số cho updateMany (cập nhật nhiều record)
+ */
 export interface UpdateManyParams<TVariables = {}> {
   resource: string;
   ids: BaseKey[];
@@ -1722,6 +1771,11 @@ export interface UpdateManyParams<TVariables = {}> {
   meta?: MetaQuery;
 }
 
+/**
+ * 🗑 DeleteOneParams - Tham số cho deleteOne (xóa 1 record)
+ *
+ * variables?: payload thêm (soft delete flag, reason,...)
+ */
 export interface DeleteOneParams<TVariables = {}> {
   resource: string;
   id: BaseKey;
@@ -1729,6 +1783,9 @@ export interface DeleteOneParams<TVariables = {}> {
   meta?: MetaQuery;
 }
 
+/**
+ * 🗑🗑 DeleteManyParams - Tham số cho deleteMany (xóa nhiều record)
+ */
 export interface DeleteManyParams<TVariables = {}> {
   resource: string;
   ids: BaseKey[];
@@ -1736,6 +1793,13 @@ export interface DeleteManyParams<TVariables = {}> {
   meta?: MetaQuery;
 }
 
+/**
+ * 🌐 CustomParams - Gửi request tùy chỉnh (ngoài CRUD chuẩn)
+ *
+ * DÙNG KHI:
+ * - Gọi endpoint đặc biệt (search, export, trigger job, upload,...)
+ * - Cần kiểm soát method/payload/query/headers thủ công
+ */
 export interface CustomParams<TQuery = unknown, TPayload = unknown> {
   url: string;
   method: "get" | "delete" | "head" | "options" | "post" | "put" | "patch";
@@ -1747,6 +1811,25 @@ export interface CustomParams<TQuery = unknown, TPayload = unknown> {
   meta?: MetaQuery;
 }
 
+// ============================================================================
+// PHẦN 9: DATA PROVIDER CONTRACT - HỢP ĐỒNG GIỮA REFINE VÀ BACKEND
+// ============================================================================
+
+/**
+ * 🤝 DataProvider - Interface chuẩn mà mọi data provider phải implement.
+ *
+ * - Tất cả method return Promise.
+ * - TData mặc định BaseRecord, override được theo resource.
+ * - Hậu tố Many là OPTIONAL (?), implement nếu backend hỗ trợ.
+ *
+ * SƠ ĐỒ NHANH:
+ * READ: getList, getMany?, getOne
+ * CREATE: create, createMany?
+ * UPDATE: update, updateMany?
+ * DELETE: deleteOne, deleteMany?
+ * CUSTOM: custom?
+ * UTIL: getApiUrl
+ */
 export type DataProvider = {
   getList: <TData extends BaseRecord = BaseRecord>(
     params: GetListParams,
@@ -1795,6 +1878,12 @@ export type DataProvider = {
   ) => Promise<CustomResponse<TData>>;
 };
 
+/**
+ * 🔌 DataProviders - Registry nhiều provider (multi-backend)
+ *
+ * - field "default" bắt buộc.
+ * - Các key khác là tên provider tùy ý (VD: "supabase", "localJson").
+ */
 export type DataProviders = {
   default: DataProvider;
   [key: string]: DataProvider;
@@ -1802,4 +1891,5 @@ export type DataProviders = {
 
 export type IDataContext = DataProviders;
 
+// Chấp nhận truyền 1 provider hoặc nhiều provider.
 export type DataBindings = DataProvider | DataProviders;
