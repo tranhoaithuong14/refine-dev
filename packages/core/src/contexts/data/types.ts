@@ -1822,6 +1822,11 @@ export interface CustomParams<TQuery = unknown, TPayload = unknown> {
  * - TData mặc định BaseRecord, override được theo resource.
  * - Hậu tố Many là OPTIONAL (?), implement nếu backend hỗ trợ.
  *
+ * 🔤 GIẢI THÍCH GENERIC CHO MỖI METHOD:
+ * - <TData extends BaseRecord = BaseRecord>: Kiểu record trả về. Nếu resource có shape riêng, truyền type đó (VD: Post, User).
+ * - <TVariables = {}>: Payload gửi lên cho create/update/delete. Mặc định object rỗng, nên KHÔNG phải any.
+ * - <TQuery = unknown, TPayload = unknown>: Payload/query cho custom; để linh hoạt với mọi endpoint đặc biệt.
+ *
  * SƠ ĐỒ NHANH:
  * READ: getList, getMany?, getOne
  * CREATE: create, createMany?
@@ -1831,44 +1836,97 @@ export interface CustomParams<TQuery = unknown, TPayload = unknown> {
  * UTIL: getApiUrl
  */
 export type DataProvider = {
+  /**
+   * 📥 getList<TData>
+   * - TData: shape của mỗi record trong danh sách.
+   * - Trả về GetListResponse<TData> (data: TData[], total: number).
+   */
   getList: <TData extends BaseRecord = BaseRecord>(
     params: GetListParams,
   ) => Promise<GetListResponse<TData>>;
 
+  /**
+   * 📥 getMany?<TData>
+   * - TData: shape record theo id (nhiều id cùng lúc).
+   * - Dùng khi cần fetch dạng `ids: [...]` thay vì list/pagination.
+   */
   getMany?: <TData extends BaseRecord = BaseRecord>(
     params: GetManyParams,
   ) => Promise<GetManyResponse<TData>>;
 
+  /**
+   * 📥 getOne<TData>
+   * - TData: shape record duy nhất.
+   * - Trả về GetOneResponse<TData> (data: TData).
+   */
   getOne: <TData extends BaseRecord = BaseRecord>(
     params: GetOneParams,
   ) => Promise<GetOneResponse<TData>>;
 
+  /**
+   * ✍️ create<TData, TVariables>
+   * - TData: record trả về sau khi tạo (có thể khác payload nếu server enrich).
+   * - TVariables: payload gửi lên server (form values).
+   */
   create: <TData extends BaseRecord = BaseRecord, TVariables = {}>(
     params: CreateParams<TVariables>,
   ) => Promise<CreateResponse<TData>>;
 
+  /**
+   * ✍️➕ createMany?<TData, TVariables>
+   * - TData: shape từng record trả về.
+   * - TVariables: payload cho mỗi phần tử trong mảng variables[].
+   */
   createMany?: <TData extends BaseRecord = BaseRecord, TVariables = {}>(
     params: CreateManyParams<TVariables>,
   ) => Promise<CreateManyResponse<TData>>;
 
+  /**
+   * 🛠 update<TData, TVariables>
+   * - TData: record sau cập nhật.
+   * - TVariables: payload cập nhật (fields thay đổi).
+   */
   update: <TData extends BaseRecord = BaseRecord, TVariables = {}>(
     params: UpdateParams<TVariables>,
   ) => Promise<UpdateResponse<TData>>;
 
+  /**
+   * 🛠🛠 updateMany?<TData, TVariables>
+   * - TData: shape mỗi record sau cập nhật.
+   * - TVariables: payload áp dụng cho tất cả ids[].
+   */
   updateMany?: <TData extends BaseRecord = BaseRecord, TVariables = {}>(
     params: UpdateManyParams<TVariables>,
   ) => Promise<UpdateManyResponse<TData>>;
 
+  /**
+   * 🗑 deleteOne<TData, TVariables>
+   * - TData: record bị xóa (nếu backend trả về).
+   * - TVariables: payload tùy chọn (reason, softDelete flag,...).
+   */
   deleteOne: <TData extends BaseRecord = BaseRecord, TVariables = {}>(
     params: DeleteOneParams<TVariables>,
   ) => Promise<DeleteOneResponse<TData>>;
 
+  /**
+   * 🗑🗑 deleteMany?<TData, TVariables>
+   * - TData: shape mỗi record bị xóa.
+   * - TVariables: payload áp dụng cho tất cả ids[].
+   */
   deleteMany?: <TData extends BaseRecord = BaseRecord, TVariables = {}>(
     params: DeleteManyParams<TVariables>,
   ) => Promise<DeleteManyResponse<TData>>;
 
   getApiUrl: () => string;
 
+  /**
+   * 🌐 custom?<TData, TQuery, TPayload>
+   * - TData: shape data trả về từ endpoint tùy chỉnh.
+   * - TQuery: kiểu của query string/body GET (nếu có).
+   * - TPayload: kiểu payload cho POST/PUT/PATCH/DELETE.
+   *
+   * Dùng khi endpoint không khớp CRUD mặc định (search nâng cao, export file, trigger job,...).
+   */
   custom?: <
     TData extends BaseRecord = BaseRecord,
     TQuery = unknown,
