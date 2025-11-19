@@ -239,15 +239,116 @@ export const useCreate = <
   // ============================================================================
 
   /**
-   * 📖 GIẢI THÍCH PATTERN "FROMPROPS":
+   * 📖 EXPLAINING THE "FROMPROPS" PATTERN & DESTRUCTURING WITH RENAMING:
    *
-   * Tại sao có "FromProps" ở tên biến?
-   * - resourceFromProps: giá trị resource từ props (config hook)
-   * - Sau này có thể override bằng giá trị từ mutate({ resource: "..." })
+   * **JAVASCRIPT/TYPESCRIPT SYNTAX EXPLANATION:**
    *
-   * VD:
-   * const { mutate } = useCreate({ resource: "posts" });  // resourceFromProps = "posts"
-   * mutate({ resource: "users", values: {...} });          // override thành "users"
+   * When you see this at line 222:
+   * ```typescript
+   * ({
+   *   resource: resourceFromProps,
+   *   values: valuesFromProps,
+   *   ...
+   * }: UseCreateProps<...> = {})
+   * ```
+   *
+   * This is called "DESTRUCTURING WITH RENAMING" (or "destructuring assignment with aliasing")
+   *
+   * **HOW IT WORKS:**
+   *
+   * Normal destructuring (without renaming):
+   * ```typescript
+   * const { resource, values } = props;
+   * // Creates variables: resource, values
+   * ```
+   *
+   * Destructuring WITH renaming:
+   * ```typescript
+   * const { resource: resourceFromProps, values: valuesFromProps } = props;
+   * // Creates variables: resourceFromProps, valuesFromProps
+   * // NOT resource, NOT values
+   * ```
+   *
+   * **SYNTAX BREAKDOWN:**
+   * ```
+   * { propertyName: newVariableName }
+   *   ^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^
+   *   Property in    New variable name
+   *   the object     to use in code
+   * ```
+   *
+   * **WHY YOU CAN'T FIND "resourceFromProps" IN THE OBJECT:**
+   *
+   * When you call useCreate like this:
+   * ```typescript
+   * useCreate({
+   *   resource: "posts",  // ← This is the property name in the object
+   *   values: { ... }
+   * })
+   * ```
+   *
+   * The parameter destructuring extracts it:
+   * ```typescript
+   * { resource: resourceFromProps } = { resource: "posts" }
+   * //          ^^^^^^^^^^^^^^^^^^
+   * //          This is just a NEW variable name
+   * //          The actual property is still "resource"
+   * ```
+   *
+   * So:
+   * - In the object you pass: property is named `resource`
+   * - In the function body: variable is named `resourceFromProps`
+   *
+   * **WHY USE THIS PATTERN?**
+   *
+   * This hook allows overriding values when calling mutate():
+   *
+   * ```typescript
+   * // Step 1: Initialize hook with default resource
+   * const { mutate } = useCreate({
+   *   resource: "posts"  // ← resourceFromProps = "posts"
+   * });
+   *
+   * // Step 2: Can override when calling mutate
+   * mutate({
+   *   resource: "users",  // ← Override! Use "users" instead of "posts"
+   *   values: { name: "John" }
+   * });
+   * ```
+   *
+   * The code later does:
+   * ```typescript
+   * mutationFn: ({
+   *   resource: resourceName = resourceFromProps,  // Use resourceFromProps as default
+   *   // If mutate() doesn't pass resource, use resourceFromProps
+   *   // If mutate() passes resource, use that instead
+   * })
+   * ```
+   *
+   * **ANOTHER EXAMPLE TO CLARIFY:**
+   *
+   * ```typescript
+   * // Without renaming:
+   * function greet({ name }) {
+   *   console.log(name); // Use "name" directly
+   * }
+   * greet({ name: "Alice" });
+   *
+   * // With renaming:
+   * function greetRenamed({ name: userName }) {
+   *   console.log(userName);  // Use "userName" instead
+   *   // console.log(name);   // ❌ ERROR: "name" is not defined
+   * }
+   * greetRenamed({ name: "Alice" });
+   * ```
+   *
+   * **IN SUMMARY:**
+   * - `resource: resourceFromProps` means:
+   *   + Extract the `resource` property from the object
+   *   + Store it in a variable named `resourceFromProps`
+   * - You search for "resourceFromProps" in the object and don't find it because
+   *   it's NOT in the object - it's the NEW variable name created by destructuring
+   * - The actual property in the object is just called `resource`
    */
 
   // Hook để kiểm tra và xử lý lỗi global
