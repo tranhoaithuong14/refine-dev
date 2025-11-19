@@ -59,6 +59,14 @@ export const AuthProviderContext = React.createContext<Partial<IAuthContext>>(
 //   * React.FC tự động cho phép prop children?: ReactNode.
 //   * PropsWithChildren<IAuthContext> cũng thêm children vào IAuthContext.
 //   * Dùng kết hợp để đảm bảo TypeScript hiểu rõ children tồn tại, dù một trong hai đã đủ; cách này thiên về “tường minh” cho người đọc mới.
+// - Vì sao chỉ cung cấp các method này (login/logout/check/register/forgotPassword/updatePassword/isProvided)?
+//   * Đây là hợp đồng tối thiểu Refine cần để giải quyết 3 nhóm nghiệp vụ:
+//     1) Phiên đăng nhập: login, logout, register (tạo tài khoản mới).
+//     2) Kiểm tra trạng thái: check (xác định authenticated & hướng xử lý), isProvided (cờ bật/tắt auth).
+//     3) Quên/đổi mật khẩu: forgotPassword, updatePassword.
+//   * Các phương thức khác (getPermissions, getIdentity, onError, ...) nằm trong IAuthContext (types.ts) và được spread từ authProvider.
+//     Provider này không ghi đè chúng vì không cần bọc try/catch bổ sung — chúng đã optional và được giữ nguyên nếu có.
+//   * Hữu hạn để tránh buộc người dùng phải implement nhiều hàm không cần thiết; các hook khác của Refine chỉ gọi những hàm này cho luồng auth mặc định.
 // ----------------------------------------------------------------------------
 export const AuthProviderContextProvider: React.FC<
   PropsWithChildren<IAuthContext>
