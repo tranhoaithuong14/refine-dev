@@ -214,6 +214,214 @@ export type UseCreateProps<
  * @typeParam TError - Kiểu dữ liệu của error
  * @typeParam TVariables - Kiểu dữ liệu của values (input)
  */
+
+// ============================================================================
+// 📖 EXPLAINING TYPESCRIPT FUNCTION SIGNATURE SYNTAX
+// ============================================================================
+
+/**
+ * The next code block (lines 217-236) looks confusing if you're new to TypeScript.
+ * Let's break it down piece by piece!
+ *
+ * **THE COMPLETE STRUCTURE:**
+ *
+ * ```typescript
+ * export const functionName = <
+ *   GenericParams     // ← Part 1: Generic type parameters
+ * >(
+ *   parameters        // ← Part 2: Function parameters
+ * ): ReturnType => {  // ← Part 3: Return type
+ *   // function body
+ * };
+ * ```
+ *
+ * **BREAKING DOWN OUR ACTUAL CODE:**
+ *
+ * ```typescript
+ * export const useCreate = <              // ← Part 1.1: Function name
+ *   TData extends BaseRecord = BaseRecord, // ← Part 1.2: Generic parameter 1
+ *   TError extends HttpError = HttpError,  // ← Part 1.3: Generic parameter 2
+ *   TVariables = {},                       // ← Part 1.4: Generic parameter 3
+ * >(                                       // ← Part 1.5: Close generics, open params
+ *   {                                      // ← Part 2.1: Start destructuring params
+ *     resource: resourceFromProps,
+ *     values: valuesFromProps,
+ *     // ... more params
+ *   }: UseCreateProps<TData, TError, TVariables> = {}  // ← Part 2.2: Type + default
+ * ): UseCreateReturnType<                 // ← Part 3.1: Return type starts
+ *   TData,
+ *   TError,
+ *   TVariables
+ * > & UseLoadingOvertimeReturnType => {   // ← Part 3.2: Return type ends, body starts
+ *   // function body
+ * };
+ * ```
+ *
+ * **PART 1: GENERIC TYPE PARAMETERS <...>**
+ *
+ * ```typescript
+ * <TData extends BaseRecord = BaseRecord, ...>
+ * ```
+ *
+ * This is like function parameters, but for TYPES instead of values.
+ *
+ * Syntax: `TypeName extends Constraint = DefaultType`
+ *
+ * - `TData`: Name of the generic type (by convention starts with T)
+ * - `extends BaseRecord`: Constraint - TData must be a BaseRecord or subtype
+ * - `= BaseRecord`: Default value - if user doesn't specify, use BaseRecord
+ *
+ * **ANALOGY WITH REGULAR FUNCTION PARAMETERS:**
+ *
+ * ```typescript
+ * // Regular function parameter with default
+ * function greet(name: string = "Guest") { }
+ *              // ^^^^           ^^^^^^^
+ *              // param name     default value
+ *
+ * // Generic type parameter with default
+ * function process<TData extends BaseRecord = BaseRecord>() { }
+ *                // ^^^^^                     ^^^^^^^^^^
+ *                // type param name           default type
+ * ```
+ *
+ * **WHY USE GENERICS?**
+ *
+ * Without generics:
+ * ```typescript
+ * const { mutate } = useCreate();
+ * const result = await mutate({ ... });
+ * result.data // ← TypeScript doesn't know what type this is
+ * ```
+ *
+ * With generics:
+ * ```typescript
+ * interface Post { id: number; title: string; }
+ * const { mutate } = useCreate<Post>();
+ * const result = await mutate({ ... });
+ * result.data // ← TypeScript knows this is Post!
+ * result.data.title // ← Autocomplete works! ✅
+ * result.data.age // ← Error: Property 'age' does not exist ❌
+ * ```
+ *
+ * **PART 2: FUNCTION PARAMETERS**
+ *
+ * ```typescript
+ * }: UseCreateProps<TData, TError, TVariables> = {}
+ *    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^    ^^
+ *    Type annotation                           Default value
+ * ```
+ *
+ * This has THREE parts:
+ *
+ * A. The destructured parameter: `{ resource: resourceFromProps, ... }`
+ * B. The type annotation: `: UseCreateProps<TData, TError, TVariables>`
+ * C. The default value: `= {}`
+ *
+ * **Let's simplify to understand:**
+ *
+ * ```typescript
+ * // Simple version - no destructuring
+ * function example(props: UseCreateProps = {}) { }
+ *                 // ^^^^^                  ^^
+ *                 // param name             default value
+ *
+ * // With destructuring
+ * function example({ resource }: UseCreateProps = {}) { }
+ *                 // ^^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^
+ *                 // destructure type annotation  default value
+ * ```
+ *
+ * **WHY DEFAULT = {} ?**
+ *
+ * This allows calling the hook with NO arguments:
+ *
+ * ```typescript
+ * const { mutate } = useCreate();  // ← Works! Uses {} as default
+ * const { mutate } = useCreate({ resource: "posts" });  // ← Also works!
+ * ```
+ *
+ * Without `= {}`, you'd HAVE to pass an argument (even if empty):
+ * ```typescript
+ * const { mutate } = useCreate();    // ❌ Error: Expected 1 argument
+ * const { mutate } = useCreate({});  // ✅ Required to pass empty object
+ * ```
+ *
+ * **PART 3: RETURN TYPE**
+ *
+ * ```typescript
+ * ): UseCreateReturnType<TData, TError, TVariables> & UseLoadingOvertimeReturnType
+ *    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ *    This is the return type
+ * ```
+ *
+ * After the closing `)` of parameters, before `=>`, you specify the return type.
+ *
+ * The `&` means "intersection type" - combine two types:
+ *
+ * ```typescript
+ * Type A & Type B = {
+ *   ...all properties from Type A,
+ *   ...all properties from Type B
+ * }
+ * ```
+ *
+ * So the hook returns an object that has:
+ * - All properties from UseCreateReturnType (mutate, mutateAsync, isPending, etc.)
+ * - All properties from UseLoadingOvertimeReturnType (elapsedTime)
+ *
+ * **SIMPLIFIED COMPARISON:**
+ *
+ * ```typescript
+ * // JavaScript - simple function
+ * const greet = (name = "Guest") => {
+ *   return `Hello ${name}`;
+ * };
+ *
+ * // TypeScript - with types
+ * const greet = (name: string = "Guest"): string => {
+ *   //           ^^^^              ^^^^^    ^^^^^^
+ *   //           type              default  return type
+ *   return `Hello ${name}`;
+ * };
+ *
+ * // TypeScript - with generics + complex types
+ * const greet = <TName extends string = string>(
+ *   name: TName = "Guest" as TName
+ * ): { message: string; input: TName } => {
+ *   return { message: `Hello ${name}`, input: name };
+ * };
+ * ```
+ *
+ * **READING THE FULL SIGNATURE LINE BY LINE:**
+ *
+ * ```typescript
+ * 217: export const useCreate = <           // 1. Declare function with generics
+ * 218:   TData extends BaseRecord = BaseRecord,    // 2. Generic param 1
+ * 219:   TError extends HttpError = HttpError,     // 3. Generic param 2
+ * 220:   TVariables = {},                           // 4. Generic param 3
+ * 221: >(                                          // 5. Close generics, open params
+ * 222-230: { resource: ..., values: ..., }        // 6. Destructured parameters
+ * 231: }: UseCreateProps<...> = {}                 // 7. Parameter type + default
+ * 231: ): UseCreateReturnType<...>                 // 8. Return type starts
+ * 232-234:   TData, TError, TVariables             // 9. Return type generic args
+ * 235: > & UseLoadingOvertimeReturnType            // 10. Return type intersection
+ * 236: => {                                        // 11. Arrow function body starts
+ * ```
+ *
+ * **IN SUMMARY:**
+ *
+ * The syntax looks complex because it combines:
+ * 1. ✅ Generic type parameters (for type safety)
+ * 2. ✅ Destructured parameters (for cleaner code)
+ * 3. ✅ Type annotations (for TypeScript checking)
+ * 4. ✅ Default values (for optional arguments)
+ * 5. ✅ Return type annotation (for type safety)
+ * 6. ✅ Intersection types (to combine multiple return types)
+ *
+ * Once you understand each piece, it becomes readable! 🎉
+ */
+
 export const useCreate = <
   TData extends BaseRecord = BaseRecord,
   TError extends HttpError = HttpError,
