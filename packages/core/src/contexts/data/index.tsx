@@ -1,24 +1,71 @@
+// ============================================================================
+// 📚 DATA CONTEXT PROVIDER - HƯỚNG DẪN CHO NGƯỜI MỚI
+// ============================================================================
+//
+// 🧭 Bối cảnh:
+// - Đây là nơi Refine "chia sẻ" data provider (cách kết nối backend) cho toàn app.
+// - Dùng React Context để truyền data provider xuống mọi component mà không cần props.
+//
+// 👶 Dành cho người mới React/TypeScript:
+// - React Context = "kênh phát sóng" giá trị toàn cục (ở đây là data provider).
+// - Provider = "anten" phát sóng giá trị cho cây component con.
+// - PropsWithChildren = kiểu React thêm thuộc tính "children" (nội dung con) vào props.
+// - Generic <T> trong TypeScript = "biến kiểu" (chi tiết xem types.ts trong hooks/form).
+//
+// 🌐 Business logic:
+// - Nếu bạn truyền 1 data provider duy nhất (có các method getList, getOne,...), mã sẽ tự
+//   bọc nó thành dạng { default: provider }.
+// - Nếu bạn truyền nhiều provider (object có key "default" + các key khác), mã dùng trực tiếp.
+// - Giá trị này được đưa vào React Context để các hook khác (useList, useOne,...) sử dụng.
+//
+// 🔗 Tài liệu tham khảo:
+// - React Context: https://react.dev/reference/react/useContext
+// - Data Provider Refine: https://refine.dev/docs/data/data-provider
+
 import React, { type PropsWithChildren } from "react";
 
 import type { DataProvider, DataProviders, IDataContext } from "./types";
 
+// ----------------------------------------------------------------------------
+// ✅ defaultDataProvider - Giá trị mặc định khi chưa truyền provider thực sự.
+// - Chiều khóa: "default" để khớp với interface DataProviders.
+// - {} as DataProvider: ép kiểu tạm thời (sẽ bị thay thế khi ứng dụng truyền provider thật).
+// ----------------------------------------------------------------------------
 export const defaultDataProvider: DataProviders = {
   default: {} as DataProvider,
 };
 
+// ----------------------------------------------------------------------------
+// 📡 DataContext - React Context chứa DataProviders
+// - createContext(defaultValue): Truyền giá trị mặc định nếu không có Provider.
+// ----------------------------------------------------------------------------
 export const DataContext =
   React.createContext<IDataContext>(defaultDataProvider);
 
+// ----------------------------------------------------------------------------
+// 🔌 Props type cho DataContextProvider
+// - dataProvider?: có thể là 1 provider (DataProvider) hoặc nhiều (DataProviders).
+// - PropsWithChildren: tự động thêm prop "children" (JSX con) cho component.
+// ----------------------------------------------------------------------------
 type Props = PropsWithChildren<{
   dataProvider?: DataProvider | DataProviders;
 }>;
 
+// ----------------------------------------------------------------------------
+// 🏗️ DataContextProvider - Component bọc ứng dụng để cung cấp data provider
+// ----------------------------------------------------------------------------
 export const DataContextProvider: React.FC<Props> = ({
   children,
   dataProvider,
 }) => {
+  // Bắt đầu với giá trị mặc định
   let providerValue = defaultDataProvider;
 
+  // Nếu có truyền dataProvider:
+  // - Trường hợp 1: Không có key "default" nhưng có các method CRUD → coi như 1 provider đơn.
+  //   Ví dụ: dataProvider = { getList: ..., getOne: ... }
+  //   → Chuyển thành { default: dataProvider }
+  // - Trường hợp 2: Đã có key "default" (multi-provider) → dùng trực tiếp.
   if (dataProvider) {
     if (
       !("default" in dataProvider) &&
@@ -32,6 +79,9 @@ export const DataContextProvider: React.FC<Props> = ({
     }
   }
 
+  // React component phải return JSX.
+  // <DataContext.Provider> là "anten" phát sóng providerValue cho toàn bộ cây con.
+  // {children} là nội dung con được render bên trong Provider.
   return (
     <DataContext.Provider value={providerValue}>
       {children}
