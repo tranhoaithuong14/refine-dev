@@ -427,3 +427,203 @@ if (query.isFetching && overtime.elapsedTime && overtime.elapsedTime > 2500) {
 - QueryKey ổn định qua `keys()`; meta có `queryKey` + `signal` giúp provider abort khi cancel.
 - Hai mode pagination: server (fetch mỗi trang) vs client (fetch một lần, slice).
 - Hãy memo hóa inputs, dùng liveMode hợp lý, và tận dụng `queryOptions` để tinh chỉnh cache/refetch.
+
+---
+
+## 18. HỢP ĐỒNG DATA PROVIDER (getList)
+
+**File tham chiếu:** `packages/core/src/hooks/data/useList.ts` (call-site), `packages/core/src/contexts/data/types.ts` (types).
+
+- **Kỳ vọng input**:
+  - `resource`: bắt buộc, string.
+  - `pagination`: `{ currentPage: number; pageSize: number; mode: "server" | "client" }` (server mode được forward; client mode chủ yếu cho slicing).
+  - `filters`: `CrudFilter[]` (provider tự map sang query string/GraphQL).
+  - `sorters`: `CrudSort[]`.
+  - `meta`: hợp nhất từ `useMeta` + `prepareQueryContext`.
+- **Kỳ vọng output**: `Promise<{ data: TQueryFnData[]; total?: number }>`
+  - `data`: mảng record.
+  - `total`: nên trả với server pagination để UI tính trang; với client mode, `total` có thể bằng `data.length`.
+- **`prepareQueryContext` side-effect**:
+  - Thêm `queryKey` và `signal` vào `meta`. Provider nên forward `signal` vào fetch/axios để abort khi component unmount hoặc query bị cancel.
+- **Đa provider**:
+  - `pickDataProvider` chọn tên; Refine sẽ gọi `dataProvider(name).getList`.
+  - Bạn có thể gắn `meta.dataProviderName` vào resource để tự động dùng provider khác.
+
+---
+
+## 19. ĐỘ SÂU KIẾN TRÚC: TIMELINE SỰ KIỆN
+
+### 19.1. Khi mount component
+
+```
+Mount
+  → useResourceParams → resolve resource
+  → pickDataProvider
+  → handlePaginationParams + merge meta
+  → useResourceSubscription (nếu liveMode ≠ "off")
+  → useQuery executes
+       ↳ builds queryKey
+       ↳ queryFn calls getList(meta includes signal)
+```
+
+### 19.2. Khi đổi `filters/sorters/pagination` (server mode)
+
+```
+State change → queryKey mới → React Query:
+  - Nếu cache hit & not stale → phục vụ cache, có thể refetch nền
+  - Nếu stale/miss → gọi queryFn mới
+```
+
+### 19.3. Khi đổi `filters/sorters/pagination` (client mode)
+
+```
+State change → queryKey KHÔNG đổi (pagination bỏ qua) → data slice client
+```
+
+### 19.4. Khi nhận live event (liveMode="auto")
+
+```
+liveProvider.subscribe → callback(event)
+  → invalidate({ invalidates: ["resourceAll"], refetch active })
+  → React Query refetch các query key liên quan resource/provider
+```
+
+### 19.5. Khi query error
+
+```
+queryResponse.isError → useEffect:
+  → checkError(error) (auth layer)
+  → handleNotification(errorNotification || fallback translate)
+  → queryOptions.onError (nếu có)
+```
+
+### 19.6. Khi query success
+
+```
+queryResponse.isSuccess → useEffect:
+  → handleNotification(successNotification if provided)
+  → queryOptions.onSuccess (nếu có)
+```
+
+---
+
+## 20. THỰC ĐƠN QUERY KEY (CỤ THỂ HÓA)
+
+### 20.1. Server mode example
+
+```typescript
+keys()
+  .data("default")
+  .resource("posts")
+  .action("list")
+  .params({
+    filters: [{ field: "status", operator: "eq", value: "published" }],
+    pagination: { currentPage: 2, pageSize: 10, mode: "server" },
+    sorters: [{ field: "createdAt", order: "desc" }],
+    meta: { populate: ["author"] },
+  })
+  .get();
+// Shape: ["data","default","posts","list", {filters:..., pagination:..., sorters:..., meta:...}]
+```
+
+### 20.2. Client mode example
+
+```typescript
+// pagination bị bỏ qua trong params
+["data","default","countries","list", { filters:[], sorters:[], meta: {} }]
+```
+
+### 20.3. Vì sao quan trọng?
+
+- Ổn định cache giữa các hook (`useList`, `useInfiniteList`) nếu chia sẻ params.
+- Invalidations: `useInvalidate` dùng cùng key builder để xác định query cần refetch.
+- Devtools: `getXRay("useList", resource?.name)` gắn meta giúp debug.
+
+---
+
+## 21. SELECT & CLIENT PAGINATION – CẠM BẪY
+
+- `memoizedSelect` đã chèn slicing trước khi gọi `queryOptions.select`.
+- Nếu bạn muốn lọc/sort thêm trong `select`, hãy nhớ:
+  - Với client mode: bạn đang thao tác trên subset đã slice.
+  - Với server mode: bạn thao tác trên dữ liệu trang hiện tại từ server.
+- Luôn `useCallback` cho `select` để tránh recreate gây rerun/invalidate.
+- Nếu `select` trả object mới mỗi lần, React Query sẽ xem là thay đổi → có thể re-render nhiều.
+
+---
+
+## 22. THÔNG BÁO & I18N: CHI TIẾT
+
+- **`notificationValues`** được build với:
+  - `meta: combinedMeta`
+  - `filters: prefferedFilters`
+  - `sorters: prefferedSorters`
+  - `hasPagination: isServerPagination`
+  - `pagination: prefferedPagination`
+- **Success**:
+  - Nếu `successNotification` là function → `(data, notificationValues, identifier)` → object.
+  - Nếu là object → dùng trực tiếp.
+  - Nếu undefined → không hiện thông báo, trừ khi bạn tự cấu hình ngoài.
+- **Error**:
+  - Fallback message: `translate("notifications.error", { statusCode }, "Error (status code: ...)")`
+  - Fallback description: `queryResponse.error.message`
+- Có thể override `translate` bằng i18n provider để đa ngôn ngữ.
+
+---
+
+## 23. LIVE MODE: BẢN CHẤT INVALIDATION
+
+- `invalidate` được gọi với:
+
+```typescript
+invalidate({
+  resource: identifier,
+  dataProviderName,
+  invalidates: ["resourceAll"],
+  invalidationFilters: { type: "active", refetchType: "active" },
+  invalidationOptions: { cancelRefetch: false },
+});
+```
+
+- Nghĩa là: chỉ refetch các query đang **active** thuộc resource/provider đó, và không hủy refetch đang chạy.
+- Với `liveMode="manual"`: bạn nhận `event` và tự gọi `query.refetch()` nếu muốn.
+
+---
+
+## 24. TƯƠNG TÁC VỚI HOOK KHÁC
+
+- **`useTable`**: nội bộ cũng dùng `useList` (hoặc `useInfiniteList` tùy config). Nếu bạn cần toàn quyền, dùng `useList` trực tiếp rồi truyền data vào bảng custom.
+- **`useInfiniteList`**: chia trang theo cursor/offset; vẫn dùng `getList` nhưng khác `queryKey` & pagination. Quy tắc filter/sorter/meta tương tự.
+- **`useSelect`**: cũng gọi `getList` nhưng map sang options (`label`/`value`). Khi cần adapter riêng, xem `useSelect` source.
+- **`useDataProvider`**: bạn có thể gọi thẳng `dataProvider().getList` khi cần bỏ qua React Query (ít khi cần).
+
+---
+
+## 25. TEST & DEBUG
+
+- **Unit test data provider**: đảm bảo `getList` trả đúng shape `{ data, total }`.
+- **Abort test**: hủy component sớm và kiểm tra provider có nhận `signal` không (nếu dùng fetch/axios).
+- **Query devtools**: bật React Query Devtools để xem `queryKey`, trạng thái refetch, stale.
+- **Live provider**: log `onLiveEvent` để chắc chắn event đang đến; kiểm tra `channel`, `types`, `params`.
+- **Notification**: stub `useHandleNotification` khi test component để tránh toast thật.
+
+---
+
+## 26. CHECKLIST TRIỂN KHAI
+
+- [ ] Resource định nghĩa trong `<Refine resources>` hoặc passed prop.
+- [ ] `dataProvider` có `getList` và trả `{ data, total }`.
+- [ ] Chọn `mode="server"` cho dataset lớn; `"client"` cho dataset nhỏ/one-shot.
+- [ ] Memo hóa `filters/sorters/select`.
+- [ ] Cân nhắc `queryOptions.staleTime/gcTime/retry`.
+- [ ] Đặt `liveMode` phù hợp; nếu `"auto"` → xác minh liveProvider hoạt động.
+- [ ] Bật `overtimeOptions` nếu cần monitor request chậm.
+
+---
+
+## 27. MINI PLAYBOOK (SCENARIOS)
+
+- **Dashboard nhiều widget**: đặt `staleTime` cao (30-60s), `refetchOnWindowFocus=false`; kết hợp `liveMode="auto"` cho widget realtime.
+- **Danh sách dài với search**: server mode + debounce input → set `enabled=false` khi chuỗi tìm kiếm trống; bật `keepPreviousData` trong `queryOptions` để giữ UI ổn định khi đổi trang.
+- **Offline-first**: set `retry: false`, `networkMode: "offlineFirst"` (TanStack option), và hiển thị `overtime` để báo chậm.
+- **Locale đa ngôn ngữ**: truyền `meta: { locale }` và thêm `locale` vào `queryKey` (nằm trong `meta`) để cache theo locale.
