@@ -318,6 +318,106 @@ export type UsePermissionsProps<
 /**
  * Return type for usePermissions hook.
  *
+ * **SYNTAX EXPLANATION:**
+ *
+ * ```typescript
+ * export type UsePermissionsReturnType<TData = PermissionResponse> =
+ *   UseQueryResult<TData, unknown>;
+ * ```
+ *
+ * **BREAKING IT DOWN:**
+ *
+ * 1. **`export type`** - Định nghĩa một type và export ra ngoài
+ *
+ * 2. **`UsePermissionsReturnType`** - Tên của type (đặt cho dễ đọc)
+ *
+ * 3. **`<TData = PermissionResponse>`** - Generic parameter với default
+ *    - `TData` = Tên generic (kiểu dữ liệu của permissions)
+ *    - `= PermissionResponse` = Default type nếu không chỉ định
+ *
+ * 4. **`= UseQueryResult<TData, unknown>`** - Gán type từ React Query
+ *    - `UseQueryResult` = Type có sẵn từ React Query
+ *    - `<TData, unknown>` = Truyền generics vào UseQueryResult
+ *      - `TData` = Kiểu của data (permissions)
+ *      - `unknown` = Kiểu của error (không quan tâm cụ thể)
+ *
+ * **WHAT IS THIS DOING?**
+ *
+ * Tạo một "alias" (tên gọi khác) cho type của React Query:
+ *
+ * ```typescript
+ * // Thay vì viết:
+ * const result: UseQueryResult<string[], unknown> = usePermissions();
+ *
+ * // Có thể viết ngắn hơn:
+ * const result: UsePermissionsReturnType<string[]> = usePermissions();
+ * ```
+ *
+ * **WHY CREATE THIS TYPE?**
+ *
+ * 1. **Tên dễ đọc:** `UsePermissionsReturnType` rõ ràng hơn `UseQueryResult`
+ * 2. **Consistency:** Tất cả Refine hooks đều có ReturnType riêng
+ * 3. **Encapsulation:** Ẩn đi React Query implementation details
+ * 4. **Future-proof:** Có thể thay đổi internal implementation sau
+ *
+ * **REAL-WORLD COMPARISON:**
+ *
+ * ```typescript
+ * // Giống như tạo nickname:
+ * type MyName = "Nguyễn Văn A";  // Tên thật dài
+ * type Nick = MyName;            // Nickname ngắn
+ *
+ * // Trong code:
+ * type FullType = UseQueryResult<PermissionResponse, unknown>;  // Dài
+ * type ShortType = UsePermissionsReturnType;                    // Ngắn, rõ ràng
+ * ```
+ *
+ * **WHAT IS UseQueryResult?**
+ *
+ * `UseQueryResult` is a React Query type that includes ALL properties returned by useQuery:
+ *
+ * ```typescript
+ * UseQueryResult<TData, TError> = {
+ *   data: TData | undefined;           // Permission data
+ *   isLoading: boolean;                // Initial loading
+ *   isFetching: boolean;               // Any fetch (including refetch)
+ *   isError: boolean;                  // Has error
+ *   isSuccess: boolean;                // Fetch succeeded
+ *   error: TError | null;              // Error object
+ *   refetch: () => Promise<...>;       // Manual refetch function
+ *   status: 'idle' | 'loading' | 'error' | 'success';  // Status
+ *   fetchStatus: 'idle' | 'fetching' | 'paused';       // Fetch status
+ *   dataUpdatedAt: number;             // Timestamp of last update
+ *   // ... and many more properties
+ * }
+ * ```
+ *
+ * **GENERICS EXPLAINED:**
+ *
+ * ```typescript
+ * UseQueryResult<TData, unknown>
+ *                ^^^^^  ^^^^^^^
+ *                │      └─ Error type (unknown = bất kỳ)
+ *                └─ Data type (permissions)
+ * ```
+ *
+ * Examples:
+ * ```typescript
+ * // Example 1: String array permissions
+ * UseQueryResult<string[], unknown>
+ * // → data: string[] | undefined
+ *
+ * // Example 2: Object permissions
+ * UseQueryResult<{ canEdit: boolean }, unknown>
+ * // → data: { canEdit: boolean } | undefined
+ *
+ * // Example 3: Our type (with default)
+ * UsePermissionsReturnType             // Uses default: PermissionResponse
+ * UsePermissionsReturnType<string[]>   // Override: string[]
+ * ```
+ *
+ * **USAGE:**
+ *
  * This is a standard React Query result with:
  * - `data` - The permission data (or undefined if loading/error)
  * - `isLoading` - True while fetching permissions
@@ -344,6 +444,23 @@ export type UsePermissionsProps<
  * // Pattern 4: Manual refetch
  * const { data, refetch } = usePermissions();
  * <button onClick={() => refetch()}>Refresh Permissions</button>
+ * ```
+ *
+ * **TYPE FLOW VISUALIZATION:**
+ *
+ * ```
+ * usePermissions<string[]>()
+ *        ↓
+ * Returns: UsePermissionsReturnType<string[]>
+ *        ↓
+ * Which is: UseQueryResult<string[], unknown>
+ *        ↓
+ * So you get: {
+ *   data: string[] | undefined,
+ *   isLoading: boolean,
+ *   isError: boolean,
+ *   ...
+ * }
  * ```
  */
 export type UsePermissionsReturnType<TData = PermissionResponse> =
