@@ -26,7 +26,157 @@
  * **🏗️ ROLE IN REFINE ARCHITECTURE:**
  *
  * This hook is a CRITICAL piece of Refine's error handling infrastructure.
- * It serves as the **CENTRAL ERROR HANDLER** for all data operations.
+ * It serves as the **CENTRAL AUTH ERROR HANDLER** for all data operations.
+ *
+ * ⚠️ **IMPORTANT CLARIFICATION:**
+ * - This hook ONLY handles **AUTHENTICATION/AUTHORIZATION errors** (401, 403, token expired, etc.)
+ * - It does NOT handle general errors (validation, network, business logic)
+ * - General errors are handled by other mechanisms (notifications, onError callbacks)
+ *
+ * **🔍 COMPLETE ERROR HANDLING SYSTEM IN REFINE:**
+ *
+ * Refine has MULTIPLE layers of error handling, not just useOnError:
+ *
+ * ```
+ * ┌─────────────────────────────────────────────────────────────────┐
+ * │            REFINE ERROR HANDLING LAYERS                         │
+ * └─────────────────────────────────────────────────────────────────┘
+ *
+ * 1️⃣ AUTH ERRORS (401, 403, Token Expired)
+ *    ↓
+ *    useOnError Hook (THIS FILE)
+ *    - Checks if logout needed
+ *    - Redirects to login
+ *    - Centralized auth error handling
+ *
+ * 2️⃣ VALIDATION ERRORS (400, 422)
+ *    ↓
+ *    useMutation's onError callback
+ *    - Returns error details to form
+ *    - Shows field-level errors
+ *    - Handled by form libraries (React Hook Form, etc.)
+ *
+ * 3️⃣ NETWORK ERRORS (500, 503, timeout)
+ *    ↓
+ *    useHandleNotification Hook
+ *    - Shows error toast/notification
+ *    - User-friendly error messages
+ *    - Auto-translated (i18n)
+ *
+ * 4️⃣ BUSINESS LOGIC ERRORS (custom errors)
+ *    ↓
+ *    dataProvider's error transformation
+ *    - Transform API errors to standard format
+ *    - Add custom error codes
+ *    - Enrich error messages
+ *
+ * 5️⃣ CUSTOM ERROR HANDLING
+ *    ↓
+ *    Component-level onError callbacks
+ *    - useCreate({ onError: (error) => {...} })
+ *    - Custom logic per operation
+ *    - Override default behavior
+ * ```
+ *
+ * **REAL EXAMPLE - ALL ERROR TYPES:**
+ *
+ * ```typescript
+ * // In useCreate hook - ALL error handling happens here:
+ * const mutation = useMutation({
+ *   mutationFn: createData,
+ *
+ *   onError: (error, variables, context) => {
+ *     // 1️⃣ AUTH ERROR CHECK (useOnError)
+ *     checkError(error);  // ← THIS HOOK (only for 401/403)
+ *     // If 401 → logout & redirect
+ *     // If 403 → redirect to access denied
+ *     // Other errors → continue to next handlers
+ *
+ *     // 2️⃣ NOTIFICATION (useHandleNotification)
+ *     handleNotification({
+ *       type: "error",
+ *       message: error.message,  // "Failed to create post"
+ *     });
+ *     // Shows error toast to user
+ *
+ *     // 3️⃣ CUSTOM CALLBACK (optional)
+ *     if (variables.onError) {
+ *       variables.onError(error, variables, context);
+ *     }
+ *     // User's custom error handling
+ *   }
+ * });
+ * ```
+ *
+ * **EXAMPLE - DIFFERENT ERROR TYPES IN ACTION:**
+ *
+ * ```typescript
+ * // Component code
+ * const { mutate: createPost } = useCreate();
+ *
+ * createPost({
+ *   resource: "posts",
+ *   values: { title: "" }  // Invalid!
+ * });
+ *
+ * // Scenario 1: Validation Error (400)
+ * // API Response: { status: 400, errors: { title: "Title is required" } }
+ * // ✅ useOnError: Skips (not 401/403)
+ * // ✅ Notification: Shows "Validation failed"
+ * // ✅ Form: Shows field error "Title is required"
+ *
+ * // Scenario 2: Auth Error (401)
+ * // API Response: { status: 401, message: "Token expired" }
+ * // ✅ useOnError: Triggers logout & redirect to /login
+ * // ✅ Notification: Shows "Session expired"
+ * // ❌ Form: Not relevant (user redirected)
+ *
+ * // Scenario 3: Server Error (500)
+ * // API Response: { status: 500, message: "Database connection failed" }
+ * // ✅ useOnError: Skips (not 401/403)
+ * // ✅ Notification: Shows "Server error occurred"
+ * // ❌ Form: Not relevant (server issue)
+ *
+ * // Scenario 4: Network Error (timeout)
+ * // Error: Network timeout after 30s
+ * // ✅ useOnError: Skips (not HTTP error)
+ * // ✅ Notification: Shows "Network error, please try again"
+ * // ❌ Form: Not relevant (network issue)
+ * ```
+ *
+ * **WHY USEONERRROR ONLY HANDLES AUTH ERRORS?**
+ *
+ * 1. **Single Responsibility Principle:**
+ *    - Each error handler has ONE job
+ *    - useOnError → Auth errors only
+ *    - useHandleNotification → User notifications
+ *    - Form validation → Field errors
+ *
+ * 2. **Different Error Requirements:**
+ *    - Auth errors → Need logout + redirect (global action)
+ *    - Validation errors → Need field-level feedback (local action)
+ *    - Network errors → Need retry logic (infrastructure)
+ *    - Business errors → Need custom handling (app-specific)
+ *
+ * 3. **Separation of Concerns:**
+ *    - Auth layer doesn't know about forms
+ *    - Notification layer doesn't know about auth
+ *    - Each layer independent and reusable
+ *
+ * **SO, TO ANSWER YOUR QUESTION:**
+ *
+ * ❓ "useOnError là trung tâm xử lý lỗi? Còn những lỗi khác thì làm sao?"
+ *
+ * ✅ ANSWER:
+ * - useOnError KHÔNG phải trung tâm xử lý TẤT CẢ lỗi
+ * - Nó CHỈ là trung tâm xử lý **AUTH ERRORS** (401, 403)
+ * - Những lỗi khác được xử lý bởi:
+ *   - Validation errors → Form validation + field errors
+ *   - Network errors → Notifications + retry logic
+ *   - Business errors → Custom onError callbacks
+ *   - General errors → useHandleNotification (toast messages)
+ *
+ * **ARCHITECTURE OVERVIEW:**
  *
  * ```
  * ┌─────────────────────────────────────────────────────────────────┐

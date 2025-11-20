@@ -1179,8 +1179,80 @@ export const useCreate = <
       if (!values) throw missingValuesError;
       if (!resourceName) throw missingResourceError;
 
-      // Kiểm tra error (có thể redirect đến login nếu 401, etc.)
+      // ======================================================================
+      // 🔍 MULTI-LAYER ERROR HANDLING - Xử lý lỗi đa tầng
+      // ======================================================================
+
+      /**
+       * ❓ QUESTION: "Tất cả lỗi đều được xử lý ở đây?"
+       *
+       * ✅ YES! Đây là nơi TẤT CẢ lỗi được xử lý theo 3 LAYERS:
+       *
+       * LAYER 1: Auth Error Check (useOnError)
+       * LAYER 2: Notification (useHandleNotification)
+       * LAYER 3: Custom Callback (optional)
+       *
+       * **WHY 3 LAYERS?**
+       * - Different errors need different handling
+       * - Separation of concerns
+       * - Flexible and extensible
+       */
+
+      // ======================================================================
+      // LAYER 1: 🔐 AUTH ERROR CHECK (useOnError)
+      // ======================================================================
+
+      /**
+       * Check if this is an AUTH ERROR (401, 403, token expired)
+       *
+       * **WHAT HAPPENS HERE:**
+       * - Calls authProvider.onError(err)
+       * - If 401 → logout & redirect to login
+       * - If 403 → redirect to access denied
+       * - Other errors → do nothing (continue to next layers)
+       *
+       * **IMPORTANT:**
+       * - This ONLY handles authentication/authorization errors
+       * - Validation errors (400) → SKIP
+       * - Server errors (500) → SKIP
+       * - Network errors → SKIP
+       *
+       * **EXAMPLE:**
+       * ```typescript
+       * // Error: { status: 401, message: "Token expired" }
+       * checkError(err);  // ← Triggers logout & redirect
+       * // User redirected to /login, code below NOT executed
+       *
+       * // Error: { status: 400, message: "Title is required" }
+       * checkError(err);  // ← Does nothing (not auth error)
+       * // Continues to LAYER 2 & 3
+       * ```
+       */
       checkError(err);
+
+      // ======================================================================
+      // LAYER 2: 📢 NOTIFICATION (useHandleNotification)
+      // ======================================================================
+
+      /**
+       * Show error notification to user (toast/alert)
+       *
+       * **WHAT HAPPENS HERE:**
+       * - Shows user-friendly error message
+       * - Translates error message (i18n)
+       * - Displays toast notification
+       *
+       * **APPLIES TO:**
+       * - Validation errors (400) → "Validation failed"
+       * - Server errors (500) → "Server error occurred"
+       * - Network errors → "Network error, please try again"
+       * - Business logic errors → Custom messages
+       *
+       * **NOTE:**
+       * If LAYER 1 triggered logout (401), user is already redirected,
+       * so this notification may not be visible. But for safety, we still
+       * handle it in case authProvider.onError returns { logout: false }.
+       */
 
       // Lấy resource config
       const { identifier } = select(resourceName);
@@ -1212,8 +1284,83 @@ export const useCreate = <
         type: "error",
       });
 
-      // Gọi custom onError callback nếu có
+      // ======================================================================
+      // LAYER 3: 🎯 CUSTOM CALLBACK (optional)
+      // ======================================================================
+
+      /**
+       * Execute user's custom onError callback if provided
+       *
+       * **WHAT HAPPENS HERE:**
+       * - User can provide custom error handling logic
+       * - Access to full error, variables, and context
+       * - Can override or extend default behavior
+       *
+       * **EXAMPLE USAGE:**
+       * ```typescript
+       * const { mutate: createPost } = useCreate();
+       *
+       * createPost({
+       *   resource: "posts",
+       *   values: { title: "New Post" },
+       *   onError: (error, variables, context) => {
+       *     // Custom error handling
+       *     console.log("Creation failed:", error);
+       *
+       *     // Send to error tracking service
+       *     Sentry.captureException(error);
+       *
+       *     // Show custom modal
+       *     showModal({ type: "error", message: error.message });
+       *
+       *     // Retry logic
+       *     if (error.status === 503) {
+       *       setTimeout(() => retry(), 5000);
+       *     }
+       *   }
+       * });
+       * ```
+       */
       mutationOptions?.onError?.(err, variables, context);
+
+      // ======================================================================
+      // SUMMARY - ERROR FLOW:
+      // ======================================================================
+
+      /**
+       * Complete error flow:
+       *
+       * API Error
+       *    ↓
+       * onError callback (THIS FUNCTION)
+       *    ↓
+       * LAYER 1: checkError(err)
+       *    ├─ If 401/403 → logout & redirect (STOP HERE)
+       *    └─ Other errors → continue
+       *    ↓
+       * LAYER 2: handleNotification(...)
+       *    └─ Show error toast to user
+       *    ↓
+       * LAYER 3: mutationOptions?.onError?.(...)
+       *    └─ Execute custom error handling
+       *
+       * **EXAMPLES:**
+       *
+       * Error 401 (Token Expired):
+       *   LAYER 1: ✅ Logout & redirect to /login
+       *   LAYER 2: ⚠️  Show notification (may not be visible due to redirect)
+       *   LAYER 3: ❌ Not executed (user redirected)
+       *
+       * Error 400 (Validation Failed):
+       *   LAYER 1: ⏭️  Skip (not auth error)
+       *   LAYER 2: ✅ Show "Validation failed" toast
+       *   LAYER 3: ✅ Execute custom callback (if provided)
+       *
+       * Error 500 (Server Error):
+       *   LAYER 1: ⏭️  Skip (not auth error)
+       *   LAYER 2: ✅ Show "Server error" toast
+       *   LAYER 3: ✅ Execute custom callback (if provided)
+       */
     },
 
     // ========================================================================

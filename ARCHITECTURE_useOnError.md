@@ -2,7 +2,9 @@
 
 ## Tóm tắt
 
-`useOnError` là hook **TRUNG TÂM** để xử lý lỗi trong toàn bộ kiến trúc Refine. Nó được tích hợp tự động vào TẤT CẢ các data hooks (useCreate, useUpdate, useDelete, etc.) để xử lý lỗi authentication một cách nhất quán.
+`useOnError` là hook **TRUNG TÂM XỬ LÝ LỖI AUTHENTICATION** trong Refine. Nó được tích hợp tự động vào TẤT CẢ các data hooks (useCreate, useUpdate, useDelete, etc.) để xử lý **CHỈ** các lỗi authentication/authorization (401, 403) một cách nhất quán.
+
+⚠️ **QUAN TRỌNG:** Hook này KHÔNG xử lý tất cả các loại lỗi. Các lỗi khác (validation, network, business logic) được xử lý bởi các mechanisms khác.
 
 ---
 
