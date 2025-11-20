@@ -1,303 +1,429 @@
 # 📘 HƯỚNG DẪN HOÀN CHỈNH VỀ useList HOOK
 
-> **TL;DR:** `useList` là wrapper của React Query `useQuery` để lấy danh sách bản ghi với pagination, filter, sorter, notifications, realtime và đo "loading overtime". Nó chạy `dataProvider.getList`, tự động merge `meta`, chọn đúng provider, và xử lý error/success theo 3 layers.
+> **TL;DR:** `useList` là wrapper của TanStack Query `useQuery` để lấy danh sách với pagination/filter/sorter, chọn đúng data provider, merge meta, đăng ký realtime, đo thời gian loading, và xử lý thông báo + lỗi theo 3 layers. Bạn hầu như không phải viết thêm boilerplate.
 
 ---
 
 ## 📋 MỤC LỤC
 
-1. [Vấn Đề Ban Đầu - Tại Sao Cần useList?](#1-vấn-đề-ban-đầu---tại-sao-cần-uselist)
-2. [Nền Tảng: React Query + Data Provider](#2-nền-tảng-react-query--data-provider)
-3. [useList Hook - Tổng Quan & API](#3-uselist-hook---tổng-quan--api)
-4. [Kiến Trúc Nội Bộ](#4-kiến-trúc-nội-bộ)
-5. [Luồng Hoạt Động Chi Tiết](#5-luồng-hoạt-động-chi-tiết)
-6. [Pagination, Filter, Sorter](#6-pagination-filter-sorter)
-7. [Tương Tác Với React Query](#7-tương-tác-với-react-query)
-8. [Error & Notification Flow](#8-error--notification-flow)
-9. [Live Mode & Realtime](#9-live-mode--realtime)
-10. [Option Cheat Sheet](#10-option-cheat-sheet)
-11. [Ví Dụ Thực Tế](#11-ví-dụ-thực-tế)
-12. [Best Practices](#12-best-practices)
-13. [Tóm Tắt](#13-tóm-tắt)
+1. [Bối Cảnh & Nỗi Đau](#1-bối-cảnh--nỗi-đau)
+2. [useList Giải Quyết Gì?](#2-uselist-giải-quyết-gì)
+3. [Tổng Quan API](#3-tổng-quan-api)
+4. [Các Mảnh Ghép Nền Tảng](#4-các-mảnh-ghép-nền-tảng)
+5. [Sơ Đồ Luồng Dữ Liệu](#5-sơ-đồ-luồng-dữ-liệu)
+6. [Phân Tích Source Code](#6-phân-tích-source-code)
+7. [Pagination - Server vs Client](#7-pagination---server-vs-client)
+8. [Filters, Sorters & Meta](#8-filters-sorters--meta)
+9. [Query Key & React Query Integration](#9-query-key--react-query-integration)
+10. [Error & Notification System (3 Layers)](#10-error--notification-system-3-layers)
+11. [Live Mode & Realtime Invalidations](#11-live-mode--realtime-invalidations)
+12. [Loading Overtime](#12-loading-overtime)
+13. [Option Cheat Sheet](#13-option-cheat-sheet)
+14. [Ví Dụ Từ A-Z](#14-ví-dụ-từ-a-z)
+15. [Patterns / Anti-Patterns](#15-patterns--anti-patterns)
+16. [FAQ Nhanh](#16-faq-nhanh)
+17. [Tóm Tắt](#17-tóm-tắt)
 
 ---
 
-## 1. VẤN ĐỀ BAN ĐẦU - TẠI SAO CẦN useList?
+## 1. BỐI CẢNH & NỖI ĐAU
 
-### 1.1. Cách Cũ - Fetch Thủ Công
+### 1.1. Manual Fetching (Trước Khi Có useList)
 
 ```typescript
-function LegacyPostList() {
-  const [page, setPage] = useState(1);
+function LegacyList() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
-    const fetchPosts = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/posts?page=${page}&pageSize=10`);
-        const body = await res.json();
-        setData(body.data);
-      } catch (e) {
-        setError("Failed to fetch");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchPosts();
+    setLoading(true);
+    fetch(`/api/posts?page=${page}&pageSize=10`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+      .then((res) => setData(res.data))
+      .catch(() => setError("Failed"))
+      .finally(() => setLoading(false));
   }, [page]);
 
-  // Tự handle cache, sort, filter, notifications, realtime ⇒ rất nhiều boilerplate
+  // Chưa có cache, retry, notifications, realtime, abort signal...
 }
 ```
 
-### 1.2. Nỗi Đau
+### 1.2. Nỗi Đau Khi Làm Thủ Công
 
-- Phải quản lý `loading`, `error`, `cache key`, refetch bằng tay.
-- Pagination/sort/filter dễ sai khi đổi API hoặc đổi backend (REST ⇄ GraphQL).
-- Không có retry, không có invalidate tự động, không gắn với hệ thống notification/error chung.
-- Không có realtime và không đo được request lâu bất thường.
+- ❌ Phải tự quản lý `loading/error`.
+- ❌ Không có cache key, dễ fetch lại thừa.
+- ❌ Khi đổi backend (REST → GraphQL) phải sửa khắp nơi.
+- ❌ Không có retry/dedup/stale time của React Query.
+- ❌ Không có thông báo, không có logout khi 401/403.
+- ❌ Không có realtime/invalidations, không đo request lâu.
 
-### 1.3. Cách Mới - Dùng useList
-
-```typescript
-function PostList() {
-  const [page, setPage] = useState(1);
-  const { query, result, overtime } = useList({
-    resource: "posts",
-    pagination: { currentPage: page, pageSize: 10, mode: "server" },
-    sorters: [{ field: "createdAt", order: "desc" }],
-  });
-
-  if (query.isLoading) return <Skeleton />;
-  if (query.isError) return <ErrorState message={query.error.message} />;
-
-  return (
-    <>
-      <div>{overtime.elapsedTime ? "Đang tải lâu..." : null}</div>
-      {result.data.map((post) => (
-        <div key={post.id}>{post.title}</div>
-      ))}
-      <Pagination total={result.total} onChange={setPage} />
-    </>
-  );
-}
-```
-
-✅ **Ít code hơn** · ✅ **Cache + retry + dedupe** · ✅ **Notification + error handling 3 layers** · ✅ **Realtime + overtime**
-
----
-
-## 2. NỀN TẢNG: REACT QUERY + DATA PROVIDER
-
-- **React Query** quản lý server state (cache, dedupe, retry, staleTime, gcTime).
-- **Data Provider** là abstraction của Refine (`dataProvider.getList`) giúp đổi backend mà không đổi UI (xem `USEDATAPROVIDER_COMPLETE_GUIDE.md`).
-- `useList` = cầu nối: nó xây `queryKey`, gọi `getList`, merge `meta`, chèn abort `signal`, và trả về `QueryObserverResult`.
-
----
-
-## 3. useList HOOK - TỔNG QUAN & API
+### 1.3. Với useList (Ngắn Gọn)
 
 ```typescript
-const { query, result, overtime } = useList<TQueryFnData, TError, TData>({
-  resource,          // optional - lấy từ context nếu không truyền
-  filters, sorters,  // CrudFilter[], CrudSort[]
-  pagination,        // { currentPage, pageSize, mode: "server" | "client" }
-  meta,              // MetaQuery - forward xuống dataProvider
-  dataProviderName,  // chọn provider nếu multi
-  queryOptions,      // UseQueryOptions override (TanStack Query)
-  successNotification, errorNotification, // tùy biến
-  liveMode, liveParams, onLiveEvent,      // realtime
-  overtimeOptions,   // cấu hình đo thời gian loading
+const { query, result, overtime } = useList({
+  resource: "posts",
+  pagination: { currentPage: 1, pageSize: 10 },
+  sorters: [{ field: "createdAt", order: "desc" }],
 });
 ```
 
-- **`query`**: object từ `useQuery` (status, refetch, error, data...).
-- **`result`**: `{ data: TData[]; total?: number }` với default `[]`.
-- **`overtime`**: `{ elapsedTime?: number }` nếu bật đo thời gian chờ.
+✅ Ít code · ✅ Cache + retry + dedupe · ✅ Notifications + auth error handling · ✅ Realtime · ✅ Loading overtime
 
 ---
 
-## 4. KIẾN TRÚC NỘI BỘ
+## 2. useList GIẢI QUYẾT GÌ?
 
-```
-UI Component
-   │
-   ▼
-useList (packages/core/src/hooks/data/useList.ts)
-   ├─ useResourceParams → resolve resource & identifier
-   ├─ pickDataProvider  → chọn provider theo prop/meta/context
-   ├─ handlePaginationParams → default page=1, size=10, mode="server"
-   ├─ useResourceSubscription → subscribe realtime (liveMode)
-   ├─ useQuery (TanStack) → queryFn = dataProvider.getList
-   │     └─ prepareQueryContext: forward queryKey + abort signal vào meta
-   ├─ useOnError + useHandleNotification → 3-layer error/success handling
-   └─ useLoadingOvertime → đo thời gian isFetching
-```
-
-- `getXRay("useList", resource?.name)` thêm meta cho devtools nội bộ.
-- `memoizedSelect` xử lý client-side pagination + wrap `queryOptions.select` để tránh re-run không cần thiết.
+| Vấn đề | Cách dùng useList |
+| --- | --- |
+| Cache & dedupe | `queryKey` ổn định qua `keys()`; React Query lo cache/dedup. |
+| Pagination/filter/sorter | Chuẩn hóa qua `handlePaginationParams`, tham gia `queryKey`. |
+| Đa data provider | `pickDataProvider` chọn từ prop/meta/context. |
+| Meta forwarding | `useMeta` merge meta từ resource + props; `prepareQueryContext` thêm `queryKey` + `signal` để provider abort được. |
+| Notifications | `successNotification` / `errorNotification` chạy tự động. |
+| Auth errors | `checkError` (Layer 1) logout/redirect nếu 401/403. |
+| Realtime | `useResourceSubscription` đăng ký `liveMode`, auto invalidate khi `"auto"`. |
+| Performance | `useLoadingOvertime` đo thời gian `isFetching`. |
 
 ---
 
-## 5. LUỒNG HOẠT ĐỘNG CHI TIẾT
-
-1) **Resolve resource**: `useResourceParams` lấy `resource`, `identifier`, `resources` từ context (matching `resource` prop nếu có).
-2) **Chọn data provider**: `pickDataProvider(identifier, dataProviderName, resources)` ⇒ ưu tiên prop, sau đó meta của resource, cuối cùng `"default"`.
-3) **Normalize inputs**:
-   - `handlePaginationParams` ⇒ `{ currentPage=1, pageSize=10, mode="server" }`.
-   - `filters/sorters` giữ nguyên; `meta` được merge qua `useMeta`.
-4) **Đăng ký realtime**: `useResourceSubscription` với `types: ["*"]`, `channel: resources/${resource?.name}`, pass `filters/sorters/pagination/meta` + `liveParams`. Nếu `liveMode="auto"` ⇒ invalidates cache khi nhận event.
-5) **Chạy useQuery**:
-   - `queryKey`: `["data", provider, resource, "list", params]` (params gồm filters + pagination server + sorters + meta).
-   - `queryFn`: gọi `dataProvider(picked).getList({ resource, pagination, filters, sorters, meta: combinedMeta + queryContext })`.
-   - `enabled`: dùng `queryOptions.enabled` hoặc `!!resource?.name`.
-6) **Client-side pagination** (nếu `mode="client"`): slice `data.data` theo `currentPage/pageSize` trước khi apply `select`.
-7) **Success effect**: nếu `query.isSuccess` ⇒ gọi `successNotification` (function/object) qua `useHandleNotification`.
-8) **Error effect**: nếu `query.isError` ⇒ `checkError` (Layer 1) rồi `handleNotification` (Layer 2) với fallback translate `notifications.error`.
-9) **Loading overtime**: `useLoadingOvertime({ isLoading: query.isFetching, ...overtimeOptions })` ⇒ trả `elapsedTime`.
-
----
-
-## 6. PAGINATION, FILTER, SORTER
-
-- **Default**: `currentPage=1`, `pageSize=10`, `mode="server"`.
-- **Server mode**: pagination tham gia `queryKey` ⇒ thay đổi page/size sẽ refetch từ server.
-- **Client mode**:
-  - `queryKey` **không** include pagination ⇒ chỉ fetch một lần, các trang sau slice từ cache.
-  - Logic slice (simplified):
-
-    ```typescript
-    if (pagination.mode === "client") {
-      data = {
-        ...raw,
-        data: raw.data.slice((page-1)*pageSize, page*pageSize),
-      };
-    }
-    ```
-
-  - Dùng cho dataset nhỏ hoặc API trả all records.
-- **Filters/Sorters**: pass thẳng xuống `getList`; filter structure = `CrudFilter[]`, sorter structure = `{ field, order }[]`.
-- **`total`**: trả về `data.total` (có thể undefined nếu provider không trả).
-
----
-
-## 7. TƯƠNG TÁC VỚI REACT QUERY
-
-- **queryKey builder**: `keys().data(pickedDataProvider).resource(identifier).action("list").params({...})` ⇒ nhất quán cho cache & invalidation.
-- **queryFn meta**: merge `combinedMeta` + `prepareQueryContext` (`queryKey`, `signal` enumerable) ⇒ provider có thể abort request khi query bị cancel.
-- **enabled**: mặc định `true` nếu có `resource?.name`; có thể override `queryOptions.enabled`.
-- **select**:
-  - `memoizedSelect` wrap `queryOptions.select` và tự slice nếu `mode="client"`.
-  - Nếu tự truyền `select`, hãy `useCallback` để tránh regenerate function liên tục (comment trong code).
-- **queryOptions**: có thể set `staleTime`, `gcTime`, `retry`, `refetchOnWindowFocus`, `meta`...; `meta` được merge thêm `getXRay` cho devtools.
-
----
-
-## 8. ERROR & NOTIFICATION FLOW
-
-- **Layer 1**: `useOnError().mutate` (`checkError`) chỉ xử lý auth errors (401/403). Xem `COMPLETE_ERROR_HANDLING_SYSTEM.md`.
-- **Layer 2**: `useHandleNotification` hiển thị notification:
-  - `successNotification`: object hoặc function `(data, values, identifier) => Notification`.
-  - `errorNotification`: object hoặc function `(error, values, identifier) => Notification`.
-  - Fallback error message: `translate("notifications.error", { statusCode })`.
-- **Layer 3**: callbacks trong `queryOptions` (`onError`, `onSuccess`, `onSettled`) nếu bạn cung cấp.
-
----
-
-## 9. LIVE MODE & REALTIME
-
-- Prop `liveMode` (inherit từ `<Refine liveMode>` nếu không truyền):
-  - `"off"`: không subscribe.
-  - `"auto"`: subscribe và tự `invalidate` `"resourceAll"` khi có event.
-  - `"manual"`: subscribe và chỉ gọi callback, bạn tự refetch.
-- `useResourceSubscription` config trong `useList`:
-  - `channel: resources/<resourceName>`
-  - `types: ["*"]` (create/update/delete/custom...)
-  - `params`: `meta`, `filters`, `sorters`, `pagination`, `subscriptionType: "useList"`, `...liveParams`
-  - `onLiveEvent`: callback prop + callback từ context đều được gọi.
-- `dataProviderName` được forward vào `meta` để liveProvider chọn đúng source.
-
----
-
-## 10. OPTION CHEAT SHEET
-
-- **resource**: tên resource; nếu bỏ trống sẽ lấy từ URL/context.
-- **pagination**: `{ currentPage, pageSize, mode }` · default `{1, 10, "server"}`.
-- **filters / sorters**: mảng `CrudFilter` / `CrudSort` (giữ nguyên format của dataProvider).
-- **meta**: object bất kỳ, merge với `resource.meta` và `prepareQueryContext`.
-- **dataProviderName**: chọn provider khi multi-tenant.
-- **queryOptions**: TanStack `UseQueryOptions` cho `getList` (trừ `queryKey/queryFn` đã bị override).
-- **successNotification / errorNotification**: object hoặc function.
-- **liveMode / liveParams / onLiveEvent**: realtime control.
-- **overtimeOptions**: cấu hình `useLoadingOvertime` (`enabled`, `interval`, `onInterval`).
-
----
-
-## 11. VÍ DỤ THỰC TẾ
+## 3. TỔNG QUAN API
 
 ```typescript
-import { useMemo, useState } from "react";
-import { useList } from "@refinedev/core";
+const { query, result, overtime } = useList<TQueryFnData, TError, TData>({
+  resource?: string;
+  filters?: CrudFilter[];
+  sorters?: CrudSort[];
+  pagination?: { currentPage?: number; pageSize?: number; mode?: "server" | "client" };
+  meta?: MetaQuery;
+  dataProviderName?: string;
+  queryOptions?: UseListQueryOptions<TQueryFnData, TError, TData>; // override từ React Query
+  successNotification?: SuccessErrorNotification["successNotification"];
+  errorNotification?: SuccessErrorNotification["errorNotification"];
+  liveMode?: LiveModeProps["liveMode"];
+  liveParams?: LiveModeProps["liveParams"];
+  onLiveEvent?: LiveModeProps["onLiveEvent"];
+  overtimeOptions?: UseLoadingOvertimeOptionsProps["overtimeOptions"];
+});
+```
 
-export const PostTable = () => {
-  const [page, setPage] = useState(1);
-  const filters = useMemo(
-    () => [{ field: "status", operator: "eq", value: "published" }],
-    [],
-  );
+- **`query`**: full `QueryObserverResult` (status, data, error, refetch, isFetching...).
+- **`result`**: `{ data: TData[]; total?: number }` với fallback `[]`.
+- **`overtime`**: `{ elapsedTime?: number }` (ms) nếu bật `useLoadingOvertime`.
 
-  const { query, result, overtime } = useList({
-    resource: "posts",
-    pagination: { currentPage: page, pageSize: 20, mode: "server" },
-    sorters: [{ field: "createdAt", order: "desc" }],
-    filters,
-    meta: { populate: ["author"] }, // forward xuống dataProvider
-    liveMode: "auto",
-    overtimeOptions: {
-      onInterval: (ms) => {
-        if (ms >= 3000) console.log("List is slow", ms);
-      },
-    },
-  });
+---
 
-  if (query.isFetching && overtime.elapsedTime && overtime.elapsedTime > 2000) {
-    return <SlowState />;
-  }
+## 4. CÁC MẢNH GHÉP NỀN TẢNG
 
-  return (
-    <>
-      {result.data.map((post) => (
-        <div key={post.id}>{post.title}</div>
-      ))}
-      <Pagination
-        current={page}
-        total={result.total}
-        onChange={(next) => setPage(next)}
-      />
-    </>
-  );
-};
+- **useResourceParams**: resolve `resource`, `identifier` từ prop hoặc route context.
+- **pickDataProvider**: chọn provider theo thứ tự ưu tiên: `dataProviderName` prop → `resource.meta.dataProviderName` → `"default"`.
+- **handlePaginationParams**: mặc định `currentPage=1`, `pageSize=10`, `mode="server"`.
+- **useMeta**: merge meta từ resource + prop.
+- **prepareQueryContext**: expose `queryKey` + lazy getter `signal` → dataProvider có thể hủy request khi cancel.
+- **useResourceSubscription**: đăng ký live events (`liveMode`).
+- **useHandleNotification** + **useOnError**: 3-layer error/success system (xem `COMPLETE_ERROR_HANDLING_SYSTEM.md`).
+- **useLoadingOvertime**: đo thời gian `isFetching` để hiển thị "slow state" hoặc log.
+
+---
+
+## 5. SƠ ĐỒ LUỒNG DỮ LIỆU
+
+```
+Component
+  │ props: resource, filters, sorters, pagination, meta, ...
+  ▼
+useList
+  ├─ useResourceParams → { resource, identifier }
+  ├─ pickDataProvider → { pickedDataProvider }
+  ├─ handlePaginationParams → normalized pagination
+  ├─ useMeta → combinedMeta (merge meta + resource meta)
+  ├─ useResourceSubscription (liveMode) → subscribe channel: resources/<name>
+  ├─ useQuery
+  │    ├─ queryKey: keys().data(picked).resource(identifier).action("list").params(...)
+  │    ├─ queryFn: dataProvider(picked).getList({ ... })
+  │    └─ select: memoized select + client-side pagination slice
+  ├─ useEffect success → handleNotification(successNotification)
+  ├─ useEffect error   → checkError(auth) + handleNotification(errorNotification)
+  └─ useLoadingOvertime → { elapsedTime }
+  ▼
+Return { query, result, overtime }
 ```
 
 ---
 
-## 12. BEST PRACTICES
+## 6. PHÂN TÍCH SOURCE CODE
 
-- Dùng `mode="client"` chỉ khi dataset nhỏ hoặc API trả đủ dữ liệu; còn lại ưu tiên server pagination.
-- Memoize `filters`, `sorters`, `queryOptions.select` với `useMemo/useCallback` để tránh regen `queryKey/select`.
-- Set `queryOptions.staleTime` phù hợp để tối ưu refetch (dashboard ⇒ cao, list realtime ⇒ thấp).
-- Truyền `meta` rõ ràng (field, populate, locale, currency...) thay vì encode vào URL thủ công.
-- Kết hợp `liveMode="auto"` + `queryOptions.refetchOnWindowFocus=false` để tránh refetch dư thừa nhưng vẫn realtime.
-- Tận dụng `overtimeOptions` để log hoặc hiển thị "Slow network" khi `elapsedTime` vượt ngưỡng.
+**File:** `packages/core/src/hooks/data/useList.ts`
+
+| Đoạn | Ý chính |
+| --- | --- |
+| `useResourceParams` | Lấy resource từ prop hoặc context; trả `resource`, `identifier`, `resources`. |
+| `pickDataProvider` | Chọn provider; giúp multi-provider hoạt động liền mạch. |
+| `handlePaginationParams` | Chuẩn hóa pagination; `mode` default `"server"`. |
+| `combinedMeta` | `useMeta({ resource, meta })` merge meta từ resource config. |
+| `useResourceSubscription` | Đăng ký realtime `types: ["*"]`, `channel: resources/<name>`, pass filters/sorters/pagination/meta. |
+| `memoizedSelect` | Thực hiện client-side pagination nếu `mode="client"` rồi mới chạy `queryOptions.select`; memo bằng `useMemo` để tránh re-run. |
+| `useQuery` | `queryKey` chuẩn; `queryFn` gọi `dataProvider.getList` với `prepareQueryContext` để forward `queryKey` + `signal` vào meta. |
+| Success effect | Nếu `query.isSuccess`, dựng `notificationConfig` (function/object) → `handleNotification`. |
+| Error effect | Nếu `query.isError`, gọi `checkError` (auth layer) → `handleNotification` với fallback `translate("notifications.error")`. |
+| Loading overtime | `useLoadingOvertime({ isLoading: queryResponse.isFetching, ... })` trả `elapsedTime`. |
+
+Pseudo (rút gọn):
+
+```typescript
+const queryResponse = useQuery({
+  queryKey: keys().data(picked).resource(identifier).action("list").params(...).get(),
+  queryFn: (ctx) => getList({ resource, pagination, filters, sorters, meta: { ...combinedMeta, ...prepareQueryContext(ctx) } }),
+  select: memoizedSelect,
+  enabled: queryOptions?.enabled ?? !!resource?.name,
+  ...queryOptions,
+});
+```
 
 ---
 
-## 13. TÓM TẮT
+## 7. PAGINATION - SERVER VS CLIENT
 
-- `useList` wrap `useQuery` + `dataProvider.getList` với pagination/filter/sort/meta chuẩn hóa.
-- Tích hợp sẵn **realtime**, **notifications**, **auth error handling**, **loading overtime**.
-- Cấu trúc `queryKey` + `prepareQueryContext` giúp cache ổn định và hỗ trợ abort request.
-- Thao tác chính: chọn resource/provider → normalize input → subscribe live → chạy `useQuery` → handle success/error → expose `query`, `result`, `overtime`.
+### 7.1. Server Mode (Default)
+
+- Pagination nằm trong `queryKey` ⇒ mỗi trang là cache entry riêng.
+- `getList` nhận `{ pagination: { currentPage, pageSize } }`.
+- Dùng cho dataset lớn hoặc API hỗ trợ server pagination.
+
+### 7.2. Client Mode
+
+- `queryKey` **không** chứa pagination ⇒ fetch 1 lần, slice trên client.
+- Slice logic:
+
+```typescript
+data: raw.data.slice(
+  (currentPage - 1) * pageSize,
+  currentPage * pageSize,
+);
+```
+
+- Dùng khi API trả toàn bộ dataset hoặc số lượng nhỏ.
+- Lưu ý: `total` vẫn lấy từ response; nếu provider không trả `total`, UI nên phòng thủ.
+
+### 7.3. Thay Đổi PageSize/Page
+
+- Server mode: thay đổi page/pageSize → cache key khác → refetch.
+- Client mode: thay đổi chỉ ảnh hưởng slice, không refetch.
+
+---
+
+## 8. FILTERS, SORTERS & META
+
+- **Filters** (`CrudFilter[]`): định dạng chuẩn của refine, ví dụ:
+
+```typescript
+[{ field: "status", operator: "eq", value: "published" }]
+```
+
+- **Sorters** (`CrudSort[]`):
+
+```typescript
+[{ field: "createdAt", order: "desc" }]
+```
+
+- **Meta** (`MetaQuery`): object tùy ý, ví dụ cho REST/GraphQL:
+  - REST: `{ headers: { Authorization: "..." }, params: { locale: "vi" } }`
+  - GraphQL: `{ fields: ["id", "title", "author { id name }"] }`
+- Meta được merge: `combinedMeta = useMeta({ resource, meta })` và thêm `prepareQueryContext(context)` (`queryKey`, `signal`).
+- `notificationValues` truyền `meta`, `filters`, `sorters`, `pagination` sang notification callbacks.
+
+---
+
+## 9. QUERY KEY & REACT QUERY INTEGRATION
+
+- **Key shape** (khái niệm): `["data", <provider>, <resource>, "list", params]`
+- Tạo bằng helper:
+
+```typescript
+keys()
+  .data(pickedDataProvider)
+  .resource(identifier ?? "")
+  .action("list")
+  .params({ ... })
+  .get();
+```
+
+- **Params trong key**:
+  - `filters`
+  - `pagination` (chỉ khi server mode)
+  - `sorters`
+  - `meta` (nếu có)
+- **enabled**: mặc định `!!resource?.name`. Có thể chủ động tắt bằng `queryOptions.enabled = false`.
+- **select**: wrap bởi `memoizedSelect` (đã client-slice). Nếu tự truyền `select`, nên `useCallback` để tránh re-render gây refetch.
+- **meta** của React Query: merge `queryOptions.meta` + `getXRay("useList", resource?.name)` để devtools biết nguồn query.
+
+---
+
+## 10. ERROR & NOTIFICATION SYSTEM (3 LAYERS)
+
+Theo `COMPLETE_ERROR_HANDLING_SYSTEM.md`:
+
+1. **Layer 1 - Auth errors**: `checkError(queryResponse.error)` → logout/redirect nếu 401/403.
+2. **Layer 2 - Notifications**: `handleNotification` với:
+   - `errorNotification` (function/object) hoặc fallback `translate("notifications.error", { statusCode })`.
+   - `successNotification` (function/object) nếu query success.
+3. **Layer 3 - Custom callbacks**: `queryOptions.onError/onSuccess/onSettled`.
+
+Thứ tự: tanstack onError/onSuccess chạy → effects trong `useEffect` xử lý layer 1/2 (nằm ngoài `useQuery`). Vì vậy bạn vẫn có thể thêm logic riêng mà không ảnh hưởng hệ thống mặc định.
+
+---
+
+## 11. LIVE MODE & REALTIME INVALIDATIONS
+
+- **liveMode values**:
+  - `"off"`: không subscribe.
+  - `"manual"`: subscribe, chỉ gọi `onLiveEvent`, bạn tự refetch.
+  - `"auto"`: subscribe và `invalidate({ invalidates: ["resourceAll"], refetch active })` khi có event.
+- **Subscription config**:
+  - `channel: resources/<resourceName>`
+  - `types: ["*"]`
+  - `params`: `filters`, `sorters`, `pagination`, `subscriptionType: "useList"`, `...liveParams`
+  - `meta`: forward `dataProviderName` để liveProvider biết nguồn.
+- **Khi nào nên "manual"**: khi bạn muốn debounce refetch, hoặc tự hợp nhất data (optimistic merge).
+- **Khi nào nên "auto"**: list realtime (chat, dashboard metric) hoặc multi-user editing.
+
+---
+
+## 12. LOADING OVERTIME
+
+- Hook: `useLoadingOvertime({ isLoading: query.isFetching, ...overtimeOptions })`.
+- `elapsedTime` tăng mỗi `interval` ms (default 1000ms từ `<Refine options.overtime>`).
+- Ứng dụng:
+  - Hiện banner "Network chậm" sau 3s.
+  - Ghi log/telemetry khi API chậm.
+  - Show skeleton nâng cao khi `elapsedTime > threshold`.
+
+Ví dụ:
+
+```typescript
+const { overtime } = useList({
+  resource: "orders",
+  overtimeOptions: {
+    onInterval: (ms) => ms >= 3000 && console.warn("Slow list", ms),
+  },
+});
+```
+
+---
+
+## 13. OPTION CHEAT SHEET
+
+- `resource`: ưu tiên prop → route context.
+- `pagination`: `{ currentPage?: number; pageSize?: number; mode?: "server" | "client" }` (default `{1,10,"server"}`).
+- `filters`: mảng `CrudFilter`.
+- `sorters`: mảng `CrudSort`.
+- `meta`: object bất kỳ, merge với `resource.meta`.
+- `dataProviderName`: tên provider; bỏ trống = "default" hoặc lấy từ resource meta.
+- `queryOptions`: `UseQueryOptions` ngoại trừ `queryKey/queryFn` (đã bị override); bạn vẫn tùy biến `staleTime`, `retry`, `select`, `gcTime`, `refetchOnWindowFocus`, ...
+- `successNotification/errorNotification`: object hoặc function.
+- `liveMode/liveParams/onLiveEvent`: điều khiển realtime.
+- `overtimeOptions`: `{ enabled?, interval?, onInterval? }`.
+
+---
+
+## 14. VÍ DỤ TỪ A-Z
+
+### 14.1. Server Pagination + Sort + Filter
+
+```typescript
+const { query, result } = useList({
+  resource: "posts",
+  pagination: { currentPage: page, pageSize: 20, mode: "server" },
+  sorters: [{ field: "createdAt", order: "desc" }],
+  filters: [{ field: "status", operator: "eq", value: "published" }],
+  meta: { populate: ["author"] },
+});
+```
+
+### 14.2. Client Pagination (Dataset Nhỏ)
+
+```typescript
+const { result } = useList({
+  resource: "countries",
+  pagination: { currentPage: page, pageSize: 50, mode: "client" },
+  queryOptions: { staleTime: Infinity }, // giữ cache mãi, không refetch
+});
+```
+
+### 14.3. Multi Data Provider
+
+```typescript
+const { result: usData } = useList({ resource: "customers", dataProviderName: "us" });
+const { result: euData } = useList({ resource: "customers", dataProviderName: "eu" });
+```
+
+### 14.4. Custom Query Options (Retry + StaleTime)
+
+```typescript
+useList({
+  resource: "orders",
+  queryOptions: {
+    retry: 1,
+    staleTime: 30_000,
+    select: (res) => ({ ...res, data: res.data.filter((o) => o.paid) }),
+  },
+});
+```
+
+### 14.5. Live Mode Auto
+
+```typescript
+useList({
+  resource: "messages",
+  liveMode: "auto",
+  liveParams: { channel: "room-123" }, // merge vào params của subscription
+  onLiveEvent: (event) => console.log("live event", event),
+});
+```
+
+### 14.6. Loading Overtime Banner
+
+```typescript
+const { query, overtime } = useList({ resource: "logs" });
+
+if (query.isFetching && overtime.elapsedTime && overtime.elapsedTime > 2500) {
+  return <SlowBanner />;
+}
+```
+
+---
+
+## 15. PATTERNS / ANTI-PATTERNS
+
+**Nên:**
+- Memo hóa `filters`, `sorters`, `select` (`useMemo/useCallback`) để tránh đổi `queryKey` không cần thiết.
+- Dùng `mode="client"` chỉ khi dataset nhỏ hoặc API trả toàn bộ kết quả.
+- Truyền `meta` rõ ràng thay vì encode vào URL string.
+- Kết hợp `liveMode="auto"` cho list realtime, hoặc `"manual"` khi muốn kiểm soát refetch.
+
+**Không nên:**
+- Không thêm pagination vào `meta` thủ công; `handlePaginationParams` đã làm.
+- Không mutate trực tiếp `query.data`; hãy dùng `queryClient.setQueryData` nếu cần.
+- Không bỏ `resource` trống nếu không có route context (sẽ `enabled=false`).
+- Không lạm dụng `retry` cao với API không ổn định → nên log và hiển thị thông báo phù hợp.
+
+---
+
+## 16. FAQ NHANH
+
+- **Tại sao `select` chạy nhiều lần?**: Memoized nhưng phụ thuộc vào `queryOptions.select` reference; hãy `useCallback`.
+- **Tại sao page đổi nhưng không refetch?**: Kiểm tra `pagination.mode`; nếu `"client"` thì chỉ slice, không fetch mới.
+- **Cần total nhưng provider không trả?**: `result.total` sẽ là `undefined`; UI nên phòng thủ hoặc custom provider trả `total`.
+- **Cách abort request?**: `prepareQueryContext` forward `signal`; provider cần hỗ trợ `signal` (fetch, axios cancel token...).
+- **Khi nào query disabled?**: `enabled` default `!!resource?.name`; nếu resource không resolve, query không chạy.
+
+---
+
+## 17. TÓM TẮT
+
+- `useList` = `useQuery` + dataProvider.getList + pagination/filter/sorter chuẩn hóa.
+- Tích hợp sẵn: chọn đúng provider, merge meta, realtime subscription, notifications, auth-error handling, loading overtime.
+- QueryKey ổn định qua `keys()`; meta có `queryKey` + `signal` giúp provider abort khi cancel.
+- Hai mode pagination: server (fetch mỗi trang) vs client (fetch một lần, slice).
+- Hãy memo hóa inputs, dùng liveMode hợp lý, và tận dụng `queryOptions` để tinh chỉnh cache/refetch.
