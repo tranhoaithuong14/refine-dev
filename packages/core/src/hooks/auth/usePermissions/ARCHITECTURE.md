@@ -84,328 +84,579 @@
 
 ---
 
-## 2. DESIGN PATTERNS
+## 2. DESIGN PATTERNS - GIẢI THÍCH CHO NGƯỜI MỚI
 
-### 2.1 Strategy Pattern
-
-**Định nghĩa:** Cho phép định nghĩa một họ các thuật toán, đóng gói mỗi thuật toán và làm cho chúng có thể hoán đổi cho nhau.
-
-**Áp dụng trong usePermissions:**
-
-```typescript
-// INTERFACE (Strategy Interface)
-type AuthProvider = {
-  getPermissions?: (params?: any) => Promise<PermissionResponse>;
-};
-
-// CONCRETE STRATEGIES (Implementations)
-
-// Strategy 1: Role-based permissions
-const roleBasedAuth: AuthProvider = {
-  getPermissions: async () => {
-    const user = getCurrentUser();
-    return user.roles; // ['admin', 'editor']
-  },
-};
-
-// Strategy 2: Permission-based
-const permissionBasedAuth: AuthProvider = {
-  getPermissions: async () => {
-    const user = getCurrentUser();
-    return user.permissions; // ['posts.edit', 'users.view']
-  },
-};
-
-// Strategy 3: API-based
-const apiBasedAuth: AuthProvider = {
-  getPermissions: async () => {
-    const response = await fetch("/api/permissions");
-    return response.json();
-  },
-};
-
-// CONTEXT (usePermissions hook)
-// Không quan tâm STRATEGY nào được dùng
-const { data } = usePermissions(); // Works with ANY strategy!
-```
-
-**Lợi ích:**
-
-- Dễ thay đổi logic permissions mà không sửa code Refine
-- Mỗi project có thể có implementation khác nhau
-- Testable - có thể mock authProvider dễ dàng
-
-**Biểu đồ:**
-
-```
-┌─────────────────────────────────────────┐
-│       YOUR CODE (Strategy)              │
-│                                         │
-│  authProvider.getPermissions = async()  │
-│  → Fetch from DB / API / Cache / ...   │
-└─────────────────────────────────────────┘
-                    ▲
-                    │ Injected via Context
-                    │
-┌───────────────────┴─────────────────────┐
-│       REFINE (Context)                  │
-│                                         │
-│  usePermissions() {                     │
-│    const { getPermissions } = context;  │
-│    return useQuery(getPermissions);     │
-│  }                                      │
-└─────────────────────────────────────────┘
-                    ▲
-                    │ Returns result
-                    │
-┌───────────────────┴─────────────────────┐
-│       COMPONENTS                        │
-│                                         │
-│  const { data } = usePermissions();     │
-│  {data?.includes('admin') && ...}       │
-└─────────────────────────────────────────┘
-```
+> **Lưu ý:** Design Pattern = "Công thức" giải quyết vấn đề lập trình phổ biến. Giống như công thức nấu ăn, bạn có thể áp dụng lại nhiều lần.
 
 ---
 
-### 2.2 Facade Pattern
+### 2.1 Strategy Pattern - Pattern "Chiến Lược"
 
-**Định nghĩa:** Cung cấp interface đơn giản cho một subsystem phức tạp.
+#### 🏪 VÍ DỤ ĐỜI THƯỜNG: Cửa hàng thanh toán
 
-**Áp dụng:**
+Tưởng tượng bạn vào cửa hàng mua đồ. Khi đến quầy thanh toán:
 
-usePermissions **ẨN ĐI** sự phức tạp của React Query:
+```
+Nhân viên: "Anh muốn thanh toán bằng gì?"
+Bạn: "Thẻ tín dụng"
+     HOẶC "Tiền mặt"
+     HOẶC "Chuyển khoản"
+     HOẶC "Ví điện tử"
+```
+
+**Điểm quan trọng:**
+
+- Cửa hàng **KHÔNG QUAN TÂM** bạn trả bằng gì
+- Họ chỉ cần nhận được tiền
+- Cách thanh toán có thể **THAY ĐỔI**
+
+#### ❌ KHÔNG có Strategy Pattern:
 
 ```typescript
-// PHỨC TẠP - Nếu không có Facade
-import { useQuery } from "@tanstack/react-query";
+// BAD - Hard-code mọi trường hợp
+function usePermissions() {
+  // Phải viết code riêng cho TỪNG project!
+
+  if (project === "ecommerce") {
+    // Fetch từ MySQL
+    const perms = await mysql.query("SELECT roles FROM users");
+    return perms;
+  }
+
+  if (project === "blog") {
+    // Fetch từ Firebase
+    const perms = await firebase.get("roles");
+    return perms;
+  }
+
+  if (project === "crm") {
+    // Fetch từ GraphQL
+    const perms = await graphql.query("{ roles }");
+    return perms;
+  }
+
+  // 😱 Thêm project mới = phải SỬA CODE framework!
+}
+```
+
+**Vấn đề:**
+
+- ❌ Phải sửa code framework mỗi khi có project mới
+- ❌ Framework biết quá nhiều chi tiết (MySQL, Firebase, GraphQL...)
+- ❌ Không thể test dễ dàng
+
+#### ✅ CÓ Strategy Pattern:
+
+```typescript
+// GOOD - Framework chỉ cần interface
+
+// Framework CHỈ nói: "Tôi cần một hàm getPermissions, còn nó làm gì thì tùy!"
+function usePermissions() {
+  const { getPermissions } = useAuthProviderContext(); // ← Get STRATEGY
+  const data = await getPermissions(); // ← Gọi strategy
+  return data;
+}
+
+// Project A: Strategy cho MySQL
+const authProvider_ProjectA = {
+  getPermissions: async () => {
+    return await mysql.query("SELECT roles FROM users");
+  },
+};
+
+// Project B: Strategy cho Firebase
+const authProvider_ProjectB = {
+  getPermissions: async () => {
+    return await firebase.get("roles");
+  },
+};
+
+// Project C: Strategy cho GraphQL
+const authProvider_ProjectC = {
+  getPermissions: async () => {
+    return await graphql.query("{ roles }");
+  },
+};
+
+// Framework KHÔNG CẦN SỬA khi có project mới! ✅
+```
+
+#### 📊 Biểu đồ:
+
+```
+┌─────────────────────────────────────┐
+│    Framework (usePermissions)       │
+│    "Tôi cần permissions,            │
+│     không quan tâm từ đâu!"         │
+└─────────────────────────────────────┘
+              ▲ Uses
+              │
+┌─────────────┴──────────────────────┐
+│  STRATEGIES (Các cách khác nhau)   │
+├────────────────────────────────────┤
+│  Strategy 1   Strategy 2   Strategy 3
+│  (MySQL)      (Firebase)   (GraphQL)│
+└────────────────────────────────────┘
+```
+
+#### 💡 TẠI SAO quan trọng?
+
+- ✅ Framework linh hoạt, dùng cho mọi project
+- ✅ Thêm strategy mới KHÔNG cần sửa framework
+- ✅ Dễ test (mock strategy)
+
+---
+
+### 2.2 Facade Pattern - Pattern "Mặt Tiền"
+
+#### 🏠 VÍ DỤ ĐỜI THƯỜNG: Khách sạn
+
+Khi bạn ở khách sạn:
+
+```
+❌ KHÔNG có Facade (phức tạp):
+Bạn: "Tôi muốn phòng sạch"
+→ Phải gọi: Bộ phận dọn phòng
+→ Phải gọi: Bộ phận giặt khăn
+→ Phải gọi: Bộ phận thay ga
+→ Phải gọi: Bộ phận kiểm tra
+
+✅ CÓ Facade (đơn giản):
+Bạn: "Tôi muốn phòng sạch"
+Lễ tân (Facade): "OK!" ← Họ lo hết!
+```
+
+**Facade** = Người trung gian che giấu sự phức tạp
+
+#### ❌ KHÔNG có Facade:
+
+```typescript
+// BAD - Component phải biết QUANULL CHI TIẾT
 
 function MyComponent() {
+  // 😱 Phải import nhiều thứ
   const { getPermissions } = useAuthProviderContext();
   const { keys } = useKeys();
+  const queryClient = useQueryClient();
 
-  const { data, isLoading, isError, error, refetch } = useQuery({
+  // 😱 Phải config phức tạp
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: keys().auth().action("permissions").get(),
     queryFn: getPermissions
       ? () => getPermissions()
       : () => Promise.resolve(undefined),
     enabled: !!getPermissions,
-    // ... many more options
+    retry: 3,
+    staleTime: 5 * 60 * 1000,
+    // ... 20 dòng config nữa
   });
 
-  // Use data...
+  // 😭 Mệt mỏi!
 }
+```
 
-// ĐơN GIẢN - Với Facade (usePermissions)
+**Vấn đề:**
+
+- ❌ Component biết quá nhiều (React Query, keys, context...)
+- ❌ Code dài dòng, khó đọc
+- ❌ Copy-paste mãi nếu nhiều components cần permissions
+
+#### ✅ CÓ Facade:
+
+```typescript
+// GOOD - Đơn giản, sạch sẽ
+
 function MyComponent() {
+  // 😊 Chỉ 1 dòng!
   const { data, isLoading } = usePermissions();
 
-  // Use data - that's it!
+  // Dùng thôi!
+  if (isLoading) return <Loading />;
+  return <div>{data}</div>;
 }
 ```
 
-**Biểu đồ:**
+**usePermissions** = Facade che giấu React Query phức tạp!
+
+#### 📊 Biểu đồ:
 
 ```
-┌─────────────────────────────────────────────────┐
-│            SIMPLE INTERFACE (Facade)            │
-│                                                 │
-│  usePermissions() → { data, isLoading, ... }   │
-└─────────────────────────────────────────────────┘
-                        │
-                        │ Hides complexity
-                        ▼
-┌─────────────────────────────────────────────────┐
-│            COMPLEX SUBSYSTEM                    │
-│                                                 │
-│  ┌──────────────────────────────────────────┐  │
-│  │ React Query                              │  │
-│  │ - Query key generation                   │  │
-│  │ - Cache management                       │  │
-│  │ - Refetch logic                          │  │
-│  │ - Error handling                         │  │
-│  │ - DevTools integration                   │  │
-│  └──────────────────────────────────────────┘  │
-│                                                 │
-│  ┌──────────────────────────────────────────┐  │
-│  │ Auth Provider Context                    │  │
-│  │ - Get getPermissions function            │  │
-│  │ - Validate existence                     │  │
-│  └──────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────┘
+┌──────────────────────────────────┐
+│   SIMPLE API (Facade)            │
+│   usePermissions()               │
+│   ↓ CHỈ 1 dòng!                  │
+└──────────────────────────────────┘
+           │ Che giấu
+           ▼
+┌──────────────────────────────────┐
+│   PHỨC TẠP (Behind the scenes)   │
+│   - React Query config           │
+│   - Context access               │
+│   - Key generation               │
+│   - Error handling               │
+│   - Cache management             │
+│   - DevTools integration         │
+└──────────────────────────────────┘
 ```
+
+#### 💡 TẠI SAO quan trọng?
+
+- ✅ Code ngắn gọn, dễ đọc
+- ✅ Component không cần biết chi tiết phức tạp
+- ✅ Thay đổi implementation dễ dàng (component không bị ảnh hưởng)
 
 ---
 
-### 2.3 Observer Pattern (via React Query)
+### 2.3 Observer Pattern - Pattern "Người Quan Sát"
 
-**Định nghĩa:** Khi một object thay đổi state, tất cả dependents được notify tự động.
+#### 📺 VÍ DỤ ĐỜI THƯỜNG: Kênh YouTube
 
-**Áp dụng:**
+Tưởng tượng bạn subscribe kênh YouTube:
 
-React Query tự động notify components khi permissions thay đổi:
+```
+Kênh YouTube = SUBJECT (Chủ thể)
+Subscribers  = OBSERVERS (Quan sát viên)
+
+Khi kênh đăng video mới:
+→ TẤT CẢ subscribers nhận thông báo CÙNG LÚC!
+
+Bạn KHÔNG cần:
+- F5 liên tục để check
+- Hỏi kênh: "Video mới chưa? Video mới chưa?"
+→ Kênh TỰ ĐỘNG thông báo!
+```
+
+#### ❌ KHÔNG có Observer (phải polling):
 
 ```typescript
-// Component A
-function AdminPanel() {
-  const { data } = usePermissions(); // Observer 1
-  console.log("AdminPanel renders with:", data);
+// BAD - Mỗi component tự fetch
+
+function ComponentA() {
+  const [perms, setPerms] = useState([]);
+
+  // 😱 Cứ 5 giây fetch lại
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetch("/api/permissions")
+        .then((res) => res.json())
+        .then(setPerms);
+    }, 5000);
+  }, []);
 }
 
-// Component B
-function UserMenu() {
+function ComponentB() {
+  const [perms, setPerms] = useState([]);
+
+  // 😱 Lại fetch nữa!
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetch("/api/permissions")
+        .then((res) => res.json())
+        .then(setPerms);
+    }, 5000);
+  }, []);
+}
+
+// 10 components = 10 API calls mỗi 5 giây = 💥 Server chết!
+```
+
+#### ✅ CÓ Observer (via React Query):
+
+```typescript
+// GOOD - Tất cả components tự động update
+
+function ComponentA() {
+  const { data } = usePermissions(); // Observer 1
+  // Tự động re-render khi permissions thay đổi!
+}
+
+function ComponentB() {
   const { data } = usePermissions(); // Observer 2
-  console.log("UserMenu renders with:", data);
+  // Cũng tự động re-render!
+}
+
+function ComponentC() {
+  const { data } = usePermissions(); // Observer 3
+  // Cũng tự động re-render!
 }
 
 // Khi permissions thay đổi:
 const { refetch } = usePermissions();
-refetch(); // → BOTH components re-render automatically!
+refetch(); // → TẤT CẢ components update CÙNG LÚC! ✅
 ```
 
-**Flow:**
+#### 📊 Biểu đồ:
 
 ```
-┌────────────────────────────────────────────┐
-│  React Query Cache (Subject)               │
-│                                            │
-│  permissions: ['admin']                    │
-└────────────────────────────────────────────┘
-        │           │           │
-        │           │           │
-   ┌────▼───┐  ┌───▼────┐  ┌──▼─────┐
-   │Observer│  │Observer│  │Observer│
-   │   A    │  │   B    │  │   C    │
-   └────────┘  └────────┘  └────────┘
-   ComponentA  ComponentB  ComponentC
+        ┌─────────────────────────┐
+        │ React Query Cache       │
+        │ (SUBJECT - Chủ thể)     │
+        │ permissions: ['admin']  │
+        └─────────────────────────┘
+                │    │    │
+        Notify  │    │    │  Notify
+                ▼    ▼    ▼
+        ┌────┐ ┌────┐ ┌────┐
+        │ A  │ │ B  │ │ C  │  ← OBSERVERS
+        └────┘ └────┘ └────┘
 
-   All automatically update when permissions change!
+Permissions thay đổi → TẤT CẢ được notify!
 ```
+
+#### 💡 TẠI SAO quan trọng?
+
+- ✅ Không cần polling (tiết kiệm server)
+- ✅ Components tự động sync
+- ✅ Đơn giản - không cần quản lý subscriptions thủ công
 
 ---
 
-### 2.4 Adapter Pattern
+### 2.4 Adapter Pattern - Pattern "Bộ Chuyển Đổi"
 
-**Định nghĩa:** Convert interface của một class sang interface khác mà clients mong đợi.
+#### 🔌 VÍ DỤ ĐỜI THƯỜNG: Cổng sạc điện thoại
 
-**Áp dụng:**
+Bạn có điện thoại iPhone (Lightning), đi nước ngoài cần sạc:
 
-usePermissions **ADAPT** bất kỳ backend nào thành interface chuẩn:
+```
+❌ KHÔNG có Adapter:
+Ổ cắm Việt Nam ≠ Ổ cắm Mỹ ≠ Ổ cắm Nhật
+→ Mỗi nước phải mua sạc mới! 😭
+
+✅ CÓ Adapter (đầu chuyển đổi):
+Ổ cắm BẤT KỲ → Adapter → Sạc iPhone
+→ 1 sạc đi khắp thế giới! 😊
+```
+
+**Adapter** = Chuyển đổi interface này sang interface khác
+
+#### ❌ KHÔNG có Adapter:
 
 ```typescript
-// Backend 1: REST API returns JSON
-authProvider.getPermissions = async () => {
-  const res = await fetch("/api/permissions");
-  return res.json(); // { roles: ['admin'] }
-};
+// BAD - Component phải biết TỪNG backend
 
-// Backend 2: GraphQL
-authProvider.getPermissions = async () => {
-  const res = await graphqlClient.query(`{ me { permissions } }`);
-  return res.data.me.permissions;
-};
+function MyComponent() {
+  const [perms, setPerms] = useState();
 
-// Backend 3: Local Storage
-authProvider.getPermissions = async () => {
-  return JSON.parse(localStorage.getItem("permissions"));
-};
+  // 😱 Phải check backend type
+  if (backendType === "REST") {
+    const res = await fetch("/api/permissions");
+    const data = await res.json();
+    setPerms(data.roles); // Format 1
+  }
 
-// Backend 4: Firebase
-authProvider.getPermissions = async () => {
-  const user = auth.currentUser;
-  const doc = await firestore.doc(`users/${user.uid}`).get();
-  return doc.data().permissions;
-};
+  if (backendType === "GraphQL") {
+    const res = await graphql.query("{ me { permissions } }");
+    setPerms(res.data.me.permissions); // Format 2
+  }
 
-// ALL backends work the same for components!
-const { data } = usePermissions(); // Same API for all!
+  if (backendType === "Firebase") {
+    const doc = await firestore.get("permissions");
+    setPerms(doc.data().perms); // Format 3
+  }
+
+  // 😭 Thêm backend = sửa component!
+}
 ```
 
-**Biểu đồ:**
+**Vấn đề:**
+
+- ❌ Component biết chi tiết mọi backend
+- ❌ Thêm backend mới = sửa tất cả components
+- ❌ Khó bảo trì
+
+#### ✅ CÓ Adapter:
+
+```typescript
+// GOOD - authProvider = ADAPTER
+
+// Backend REST
+const restAdapter = {
+  getPermissions: async () => {
+    const res = await fetch("/api/permissions");
+    const data = await res.json();
+    return data.roles; // ← Chuyển đổi về format chung
+  },
+};
+
+// Backend GraphQL
+const graphqlAdapter = {
+  getPermissions: async () => {
+    const res = await graphql.query("{ me { permissions } }");
+    return res.data.me.permissions; // ← Chuyển đổi về format chung
+  },
+};
+
+// Backend Firebase
+const firebaseAdapter = {
+  getPermissions: async () => {
+    const doc = await firestore.get("permissions");
+    return doc.data().perms; // ← Chuyển đổi về format chung
+  },
+};
+
+// Component KHÔNG CẦN BIẾT backend nào!
+function MyComponent() {
+  const { data } = usePermissions(); // ← Luôn nhận format giống nhau!
+  return <div>{data}</div>;
+}
+```
+
+#### 📊 Biểu đồ:
 
 ```
-┌──────────────────────────────────────────────────┐
-│         DIFFERENT BACKENDS (Adaptees)            │
-├──────────────────────────────────────────────────┤
-│  REST API  │  GraphQL  │  Firebase  │  LocalDB  │
-└──────────────────────────────────────────────────┘
-                        │
-                        │ Adapted via authProvider.getPermissions
-                        ▼
-┌──────────────────────────────────────────────────┐
-│              ADAPTER (authProvider)               │
-│  getPermissions: () => Promise<PermissionData>  │
-└──────────────────────────────────────────────────┘
-                        │
-                        │ Standardized interface
-                        ▼
-┌──────────────────────────────────────────────────┐
-│          CLIENT (usePermissions hook)            │
-│  Always receives same format regardless of       │
-│  backend implementation                          │
-└──────────────────────────────────────────────────┘
+┌────────────────────────────────────┐
+│  DIFFERENT BACKENDS (Khác nhau)   │
+│  REST │ GraphQL │ Firebase │ SQL  │
+└────────────────────────────────────┘
+         │     │     │      │
+         └─────┴─────┴──────┘
+                 │
+         Adapter chuyển đổi
+                 ▼
+┌────────────────────────────────────┐
+│    STANDARD INTERFACE (Chuẩn)     │
+│  getPermissions() → ['admin']     │
+└────────────────────────────────────┘
+                 │
+                 ▼
+┌────────────────────────────────────┐
+│    COMPONENTS (Luôn giống nhau)   │
+│  const { data } = usePermissions() │
+└────────────────────────────────────┘
 ```
+
+#### 💡 TẠI SAO quan trọng?
+
+- ✅ Components không phụ thuộc backend cụ thể
+- ✅ Đổi backend dễ dàng (chỉ đổi adapter)
+- ✅ Code reusable (1 component chạy với mọi backend)
 
 ---
 
-### 2.5 Dependency Injection Pattern
+### 2.5 Dependency Injection - Pattern "Tiêm Phụ Thuộc"
 
-**Định nghĩa:** Dependencies được "inject" từ bên ngoài thay vì hard-code.
+#### 🍰 VÍ DỤ ĐỜI THƯỜNG: Làm bánh
 
-**Áp dụng:**
+**Tình huống 1 - Hard-coded (Không linh hoạt):**
+
+```
+Công thức: "Làm bánh STRAWBERRY"
+Bước 1: Lấy STRAWBERRY từ tủ lạnh
+Bước 2: Cho vào bánh
+
+Vấn đề: Muốn làm bánh CHOCOLATE? → Phải viết lại TOÀN BỘ công thức!
+```
+
+**Tình huống 2 - Dependency Injection (Linh hoạt):**
+
+```
+Công thức: "Làm bánh với TOPPING"
+Bước 1: Ai đó đưa cho bạn TOPPING (strawberry, chocolate, blueberry...)
+Bước 2: Cho topping đó vào bánh
+
+Lợi ích: Cùng 1 công thức, làm được MỌI loại bánh!
+```
+
+#### ❌ KHÔNG có Dependency Injection:
 
 ```typescript
-// BAD - Hard-coded dependency
+// BAD - Hard-code URL
+
 function usePermissions() {
-  const data = await fetch("/api/permissions"); // ← Hard-coded!
+  // 😱 Hard-code URL
+  const data = await fetch("/api/permissions");
+  return data;
+
+  // Vấn đề:
+  // - Đổi URL? → Sửa code
+  // - Test? → Không mock được
+  // - Dùng cho backend khác? → Viết lại hàm
+}
+```
+
+**Vấn đề:**
+
+- ❌ Cứng nhắc, không linh hoạt
+- ❌ Khó test
+- ❌ Không reusable
+
+#### ✅ CÓ Dependency Injection:
+
+```typescript
+// GOOD - "Inject" dependency từ bên ngoài
+
+// KHÔNG biết trước sẽ dùng gì
+function usePermissions() {
+  // ↓ AI ĐÓ sẽ "inject" (tiêm) getPermissions vào
+  const { getPermissions } = useAuthProviderContext();
+  const data = await getPermissions(); // ← Dùng cái được inject
   return data;
 }
 
-// GOOD - Injected dependency
-function usePermissions() {
-  const { getPermissions } = useAuthProviderContext(); // ← Injected!
-  const data = await getPermissions();
-  return data;
-}
+// NGƯỜI DÙNG quyết định inject gì
+// Project A: Inject REST API
+<Refine
+  authProvider={{
+    getPermissions: () => fetch('/api/permissions')
+  }}
+/>
+
+// Project B: Inject GraphQL
+<Refine
+  authProvider={{
+    getPermissions: () => graphql.query('...')
+  }}
+/>
+
+// Cùng 1 hook, hoạt động với MỌI injection! ✅
 ```
 
-**Injection Flow:**
+#### 📊 Injection Flow:
 
 ```
-┌─────────────────────────────────────────┐
-│  STEP 1: Define dependency              │
-│                                         │
-│  <Refine                                │
-│    authProvider={{                      │
-│      getPermissions: myFunction ───┐    │
-│    }}                              │    │
-│  />                                │    │
-└────────────────────────────────────┼────┘
-                                     │
-                                     │ Inject via Context
-                                     ▼
-┌────────────────────────────────────┼────┐
-│  STEP 2: Store in Context          │    │
-│                                    │    │
-│  AuthContext.Provider              │    │
-│    value={{ getPermissions }} ◄────┘    │
-└─────────────────────────────────────────┘
-                                     │
-                                     │ Consume from Context
-                                     ▼
-┌─────────────────────────────────────────┐
-│  STEP 3: Use in hook                    │
-│                                         │
-│  const { getPermissions } =             │
-│    useAuthProviderContext(); ◄──────────┘
-└─────────────────────────────────────────┘
+BƯỚC 1: DEFINE (Định nghĩa)
+┌─────────────────────────────┐
+│ <Refine                     │
+│   authProvider={{           │
+│     getPermissions: myFunc  │─┐
+│   }}                        │ │
+│ />                          │ │
+└─────────────────────────────┘ │
+                                │
+        INJECT (Tiêm vào)      │
+                                ▼
+BƯỚC 2: STORE (Lưu trữ)
+┌─────────────────────────────┐
+│ Context.Provider            │
+│   value={{ getPermissions }}│◄┘
+└─────────────────────────────┘
+                │
+                │
+                ▼
+BƯỚC 3: USE (Sử dụng)
+┌─────────────────────────────┐
+│ const { getPermissions } =  │
+│   useAuthProviderContext(); │◄─┘
+└─────────────────────────────┘
 ```
 
-**Lợi ích:**
+#### 💡 TẠI SAO quan trọng?
 
-- Testing: Dễ mock authProvider
-- Flexibility: Swap implementation dễ dàng
-- Decoupling: Hook không biết implementation details
+- ✅ Linh hoạt - dễ thay đổi implementation
+- ✅ Testable - dễ mock dependencies
+- ✅ Decoupled - các phần không phụ thuộc chặt chẽ vào nhau
+
+---
+
+## 📝 TÓM TẮT 5 PATTERNS
+
+| Pattern                  | Ví dụ đời thường                  | Giải quyết vấn đề gì          | Trong usePermissions       |
+| ------------------------ | --------------------------------- | ----------------------------- | -------------------------- |
+| **Strategy**             | Cách thanh toán (tiền mặt/thẻ/ví) | Nhiều cách làm 1 việc         | Nhiều cách lấy permissions |
+| **Facade**               | Lễ tân khách sạn                  | Ẩn sự phức tạp                | Ẩn React Query config      |
+| **Observer**             | Subscribe YouTube                 | Tự động nhận thông báo        | Tự động re-render          |
+| **Adapter**              | Đầu chuyển đổi sạc                | Kết nối 2 interface khác nhau | Kết nối mọi backend        |
+| **Dependency Injection** | Công thức làm bánh                | Linh hoạt, dễ thay đổi        | Inject authProvider        |
 
 ---
 
