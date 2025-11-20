@@ -140,6 +140,9 @@ export const useList = <
   TError
 > &
   UseLoadingOvertimeReturnType => {
+  // 🧭 BƯỚC 1: LẤY THÔNG TIN RESOURCE & PROVIDER
+  // - useResourceParams: resolve resource theo prop hoặc URL (context refine).
+  // - pickDataProvider: chọn provider theo prop → resource.meta.dataProviderName → "default".
   const { resources, resource, identifier } = useResourceParams({
     resource: resourceFromProp,
   });
@@ -164,8 +167,12 @@ export const useList = <
   });
   const isServerPagination = prefferedPagination.mode === "server";
 
+  // 🧱 BƯỚC 2: BUILD META (thông tin phụ đi kèm request)
+  // - useMeta merge meta từ resource definition + prop meta.
+  // - combinedMeta được forward xuống dataProvider.
   const combinedMeta = getMeta({ resource, meta: preferredMeta });
 
+  // 🔔 Notification payload: được dùng cho success/error notification callbacks.
   const notificationValues = {
     meta: combinedMeta,
     filters: prefferedFilters,
@@ -174,11 +181,20 @@ export const useList = <
     sorters: prefferedSorters,
   };
 
+  // 🚦 BƯỚC 2.5: BẬT/TẮT QUERY
+  // - Nếu queryOptions.enabled undefined → mặc định true.
+  // - Bạn có thể tắt tạm bằng enabled=false (vd: chờ có filter mới fetch).
   const isEnabled =
     queryOptions?.enabled === undefined || queryOptions?.enabled === true;
 
   const { getList } = dataProvider(pickedDataProvider);
 
+  // 📡 BƯỚC 3: ĐĂNG KÝ REALTIME (nếu liveMode không tắt)
+  // - liveMode="auto": khi có event → invalidate cache để refetch.
+  // - liveMode="manual": chỉ gọi onLiveEvent; bạn tự refetch.
+  // - liveMode="off": bỏ qua.
+  // - channel: resources/<resourceName> để tách kênh theo resource.
+  // - params: gửi filters/sorters/pagination/meta để server biết bối cảnh subscription.
   useResourceSubscription({
     resource: identifier,
     types: ["*"],
@@ -204,6 +220,9 @@ export const useList = <
   // Memoize the select function to prevent it from running multiple times
   // Note: If queryOptions.select is not memoized by the user, this will still
   // re-run on every render. Users should wrap their select function in useCallback.
+  // 🧠 BƯỚC 3: CHUẨN BỊ SELECT + CLIENT PAGINATION
+  // - Nếu mode="client": slice dữ liệu trên client theo currentPage/pageSize.
+  // - Sau đó mới chạy queryOptions.select (nếu có).
   const memoizedSelect = useMemo(() => {
     return (rawData: GetListResponse<TQueryFnData>): GetListResponse<TData> => {
       let data = rawData;
@@ -233,6 +252,10 @@ export const useList = <
     queryOptions?.select,
   ]);
 
+  // 🔄 BƯỚC 4: CHẠY useQuery (TanStack)
+  // - queryKey: dùng helper keys() để ổn định cache/invalidate.
+  // - queryFn: gọi dataProvider.getList với meta + context (queryKey, signal) để provider có thể abort.
+  // - enabled: tự động tắt nếu không resolve được resource.
   const queryResponse = useQuery<
     GetListResponse<TQueryFnData>,
     TError,
@@ -243,10 +266,10 @@ export const useList = <
       .resource(identifier ?? "")
       .action("list")
       .params({
-        ...(preferredMeta || {}),
+        ...(preferredMeta || {}), // meta góp phần tạo cache-key nếu bạn truyền (vd locale)
         filters: prefferedFilters,
         ...(isServerPagination && {
-          pagination: prefferedPagination,
+          pagination: prefferedPagination, // chỉ thêm vào key khi server-mode để phân trang
         }),
         ...(sorters && {
           sorters,
@@ -256,7 +279,7 @@ export const useList = <
     queryFn: (context) => {
       const meta = {
         ...combinedMeta,
-        ...prepareQueryContext(context),
+        ...prepareQueryContext(context), // thêm queryKey + signal để provider cancel được request khi abort
       };
       return getList<TQueryFnData>({
         resource: resource?.name ?? "",
@@ -278,7 +301,8 @@ export const useList = <
     },
   });
 
-  // Handle success
+  // ✅ BƯỚC 5: HANDLE SUCCESS (effect ngoài useQuery để không block render)
+  // - Nếu có successNotification: gọi useHandleNotification.
   useEffect(() => {
     if (queryResponse.isSuccess && queryResponse.data) {
       const notificationConfig =
@@ -291,10 +315,12 @@ export const useList = <
           : successNotification;
 
       handleNotification(notificationConfig);
-    }
+        }
   }, [queryResponse.isSuccess, queryResponse.data, successNotification]);
 
-  // Handle error
+  // ❌ BƯỚC 6: HANDLE ERROR (3-layer từ COMPLETE_ERROR_HANDLING_SYSTEM.md)
+  // - Layer 1: checkError (useOnError) xử lý auth errors (401/403).
+  // - Layer 2: handleNotification hiển thị toast + message fallback.
   useEffect(() => {
     if (queryResponse.isError && queryResponse.error) {
       checkError(queryResponse.error);
@@ -321,6 +347,8 @@ export const useList = <
     }
   }, [queryResponse.isError, queryResponse.error?.message]);
 
+  // ⏱️ BƯỚC 7: ĐO THỜI GIAN LOADING (overtime)
+  // - Dùng isFetching để đo xem request có quá lâu không (phục vụ UX/logging).
   const { elapsedTime } = useLoadingOvertime({
     ...overtimeOptions,
     isLoading: queryResponse.isFetching,
@@ -329,8 +357,8 @@ export const useList = <
   return {
     query: queryResponse,
     result: {
-      data: queryResponse?.data?.data || EMPTY_ARRAY,
-      total: queryResponse?.data?.total,
+      data: queryResponse?.data?.data || EMPTY_ARRAY, // luôn trả mảng để tránh undefined checks ở UI
+      total: queryResponse?.data?.total, // có thể undefined nếu provider không trả
     },
     overtime: { elapsedTime },
   };
