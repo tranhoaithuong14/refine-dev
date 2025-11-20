@@ -9,6 +9,187 @@ import { pickDataProvider } from "@definitions/helpers";
 import { getXRay } from "@refinedev/devtools-internal";
 
 // ============================================================================
+// 🪝 WHAT ARE REACT HOOKS? - HOOKS LÀ GÌ?
+// ============================================================================
+
+/**
+ * ❓ QUESTION: "Vậy hook là một function hả?"
+ *
+ * ✅ YES! A hook IS a function, but a SPECIAL kind of function with specific rules.
+ *
+ * **DEFINITION:**
+ * A React Hook is a JavaScript function that:
+ * 1. Lets you "hook into" React features (state, lifecycle, context, etc.)
+ * 2. Can only be called inside React components or other custom hooks
+ * 3. Must follow specific naming conventions and rules
+ *
+ * **HOOK vs REGULAR FUNCTION:**
+ *
+ * ┌────────────────────┬─────────────────┬──────────────────────────┐
+ * │                    │ Regular Function│ React Hook               │
+ * ├────────────────────┼─────────────────┼──────────────────────────┤
+ * │ Is it a function?  │ Yes             │ Yes                      │
+ * │ Naming convention  │ Any name        │ MUST start with "use"    │
+ * │ Where to call?     │ Anywhere        │ Only in components/hooks │
+ * │ Can use state?     │ No              │ Yes (with useState)      │
+ * │ Can use effects?   │ No              │ Yes (with useEffect)     │
+ * │ Order matters?     │ No              │ YES - must be consistent │
+ * └────────────────────┴─────────────────┴──────────────────────────┘
+ *
+ * **EXAMPLE - REGULAR FUNCTION:**
+ *
+ * ```typescript
+ * // This is NOT a hook - just a regular helper function
+ * function formatDate(date: Date): string {
+ *   return date.toISOString();
+ * }
+ *
+ * // Can call anywhere
+ * const result = formatDate(new Date());
+ * ```
+ *
+ * **EXAMPLE - REACT HOOK:**
+ *
+ * ```typescript
+ * // This IS a hook - starts with "use" and uses React features
+ * function useCurrentTime() {
+ *   const [time, setTime] = useState(new Date());  // ← Uses React state
+ *
+ *   useEffect(() => {  // ← Uses React effect
+ *     const timer = setInterval(() => setTime(new Date()), 1000);
+ *     return () => clearInterval(timer);
+ *   }, []);
+ *
+ *   return time;
+ * }
+ *
+ * // Can ONLY call inside components or other hooks
+ * function MyComponent() {
+ *   const time = useCurrentTime();  // ✅ Valid - inside component
+ *   return <div>{time.toISOString()}</div>;
+ * }
+ *
+ * // ❌ CANNOT call outside components
+ * const globalTime = useCurrentTime();  // ❌ Error! Not in a component
+ * ```
+ *
+ * **WHY THE NAME "HOOK"?**
+ *
+ * The word "hook" means to "attach" or "connect" something.
+ * React Hooks let you "hook into" (connect to) React's internal features:
+ *
+ * - `useState` → hooks into state management
+ * - `useEffect` → hooks into component lifecycle
+ * - `useContext` → hooks into React context
+ * - `useCreate` (this file) → hooks into data mutation + notifications + caching
+ *
+ * **THE RULES OF HOOKS:**
+ *
+ * React Hooks have strict rules that MUST be followed:
+ *
+ * 1. ✅ **Only call hooks at the TOP LEVEL**
+ *    - Don't call inside loops, conditions, or nested functions
+ *
+ * ```typescript
+ * function MyComponent() {
+ *   // ✅ CORRECT - at top level
+ *   const [count, setCount] = useState(0);
+ *
+ *   if (someCondition) {
+ *     const [name, setName] = useState("");  // ❌ WRONG - inside condition
+ *   }
+ *
+ *   for (let i = 0; i < 10; i++) {
+ *     const value = useState(i);  // ❌ WRONG - inside loop
+ *   }
+ * }
+ * ```
+ *
+ * 2. ✅ **Only call hooks from React functions**
+ *    - Call from React components (function components)
+ *    - Call from custom hooks (functions starting with "use")
+ *
+ * ```typescript
+ * // ✅ CORRECT - calling from component
+ * function MyComponent() {
+ *   const { mutate } = useCreate();
+ *   return <button onClick={() => mutate({...})}>Create</button>;
+ * }
+ *
+ * // ✅ CORRECT - calling from custom hook
+ * function useMyCustomHook() {
+ *   const { mutate } = useCreate();
+ *   return { createPost: mutate };
+ * }
+ *
+ * // ❌ WRONG - calling from regular function
+ * function regularFunction() {
+ *   const { mutate } = useCreate();  // ❌ Error!
+ * }
+ *
+ * // ❌ WRONG - calling outside any function
+ * const { mutate } = useCreate();  // ❌ Error!
+ * ```
+ *
+ * 3. ✅ **Use the "use" prefix for custom hooks**
+ *
+ * ```typescript
+ * // ✅ CORRECT - starts with "use"
+ * function useUserData() { ... }
+ * function useCreate() { ... }
+ *
+ * // ❌ WRONG - doesn't start with "use" but uses hooks inside
+ * function getUserData() {
+ *   const [data] = useState();  // ❌ Breaks rules!
+ * }
+ * ```
+ *
+ * **TYPES OF HOOKS:**
+ *
+ * 1. **Built-in React Hooks** (from React library)
+ *    - useState, useEffect, useContext, useRef, useMemo, useCallback, etc.
+ *
+ * 2. **Third-party Hooks** (from libraries)
+ *    - useMutation (React Query) ← this file uses it
+ *    - useQuery (React Query)
+ *
+ * 3. **Custom Hooks** (you create them)
+ *    - useCreate ← THIS FILE! 🎯
+ *    - useUpdate, useDelete, etc.
+ *
+ * **THIS FILE (useCreate) IS A CUSTOM HOOK THAT:**
+ *
+ * ```typescript
+ * export const useCreate = (...) => {
+ *   // Uses other hooks inside
+ *   const dataProvider = useDataProvider();      // ← Hook
+ *   const invalidateStore = useInvalidate();     // ← Hook
+ *   const translate = useTranslate();            // ← Hook
+ *   const mutation = useMutation({ ... });       // ← Hook
+ *
+ *   // Returns data and functions
+ *   return {
+ *     mutate: mutation.mutate,
+ *     isPending: mutation.isPending,
+ *     // ... more properties
+ *   };
+ * };
+ * ```
+ *
+ * **SUMMARY:**
+ *
+ * - ✅ Hooks ARE functions
+ * - ✅ But they're SPECIAL functions with rules
+ * - ✅ They let you use React features without classes
+ * - ✅ They must start with "use"
+ * - ✅ They can only be called in components or other hooks
+ * - ✅ `useCreate` is a custom hook that wraps `useMutation` and adds Refine features
+ *
+ * Before hooks (React < 16.8), you needed class components for state.
+ * With hooks (React >= 16.8), you can use state in function components! 🎉
+ */
+
+// ============================================================================
 // 📚 REACT QUERY MUTATIONS - KHÁI NIỆM QUAN TRỌNG
 // ============================================================================
 
@@ -214,6 +395,214 @@ export type UseCreateProps<
  * @typeParam TError - Kiểu dữ liệu của error
  * @typeParam TVariables - Kiểu dữ liệu của values (input)
  */
+
+// ============================================================================
+// 📖 EXPLAINING TYPESCRIPT FUNCTION SIGNATURE SYNTAX
+// ============================================================================
+
+/**
+ * The next code block (lines 217-236) looks confusing if you're new to TypeScript.
+ * Let's break it down piece by piece!
+ *
+ * **THE COMPLETE STRUCTURE:**
+ *
+ * ```typescript
+ * export const functionName = <
+ *   GenericParams     // ← Part 1: Generic type parameters
+ * >(
+ *   parameters        // ← Part 2: Function parameters
+ * ): ReturnType => {  // ← Part 3: Return type
+ *   // function body
+ * };
+ * ```
+ *
+ * **BREAKING DOWN OUR ACTUAL CODE:**
+ *
+ * ```typescript
+ * export const useCreate = <              // ← Part 1.1: Function name
+ *   TData extends BaseRecord = BaseRecord, // ← Part 1.2: Generic parameter 1
+ *   TError extends HttpError = HttpError,  // ← Part 1.3: Generic parameter 2
+ *   TVariables = {},                       // ← Part 1.4: Generic parameter 3
+ * >(                                       // ← Part 1.5: Close generics, open params
+ *   {                                      // ← Part 2.1: Start destructuring params
+ *     resource: resourceFromProps,
+ *     values: valuesFromProps,
+ *     // ... more params
+ *   }: UseCreateProps<TData, TError, TVariables> = {}  // ← Part 2.2: Type + default
+ * ): UseCreateReturnType<                 // ← Part 3.1: Return type starts
+ *   TData,
+ *   TError,
+ *   TVariables
+ * > & UseLoadingOvertimeReturnType => {   // ← Part 3.2: Return type ends, body starts
+ *   // function body
+ * };
+ * ```
+ *
+ * **PART 1: GENERIC TYPE PARAMETERS <...>**
+ *
+ * ```typescript
+ * <TData extends BaseRecord = BaseRecord, ...>
+ * ```
+ *
+ * This is like function parameters, but for TYPES instead of values.
+ *
+ * Syntax: `TypeName extends Constraint = DefaultType`
+ *
+ * - `TData`: Name of the generic type (by convention starts with T)
+ * - `extends BaseRecord`: Constraint - TData must be a BaseRecord or subtype
+ * - `= BaseRecord`: Default value - if user doesn't specify, use BaseRecord
+ *
+ * **ANALOGY WITH REGULAR FUNCTION PARAMETERS:**
+ *
+ * ```typescript
+ * // Regular function parameter with default
+ * function greet(name: string = "Guest") { }
+ *              // ^^^^           ^^^^^^^
+ *              // param name     default value
+ *
+ * // Generic type parameter with default
+ * function process<TData extends BaseRecord = BaseRecord>() { }
+ *                // ^^^^^                     ^^^^^^^^^^
+ *                // type param name           default type
+ * ```
+ *
+ * **WHY USE GENERICS?**
+ *
+ * Without generics:
+ * ```typescript
+ * const { mutate } = useCreate();
+ * const result = await mutate({ ... });
+ * result.data // ← TypeScript doesn't know what type this is
+ * ```
+ *
+ * With generics:
+ * ```typescript
+ * interface Post { id: number; title: string; }
+ * const { mutate } = useCreate<Post>();
+ * const result = await mutate({ ... });
+ * result.data // ← TypeScript knows this is Post!
+ * result.data.title // ← Autocomplete works! ✅
+ * result.data.age // ← Error: Property 'age' does not exist ❌
+ * ```
+ *
+ * **PART 2: FUNCTION PARAMETERS**
+ *
+ * ```typescript
+ * }: UseCreateProps<TData, TError, TVariables> = {}
+ *    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^    ^^
+ *    Type annotation                           Default value
+ * ```
+ *
+ * This has THREE parts:
+ *
+ * A. The destructured parameter: `{ resource: resourceFromProps, ... }`
+ * B. The type annotation: `: UseCreateProps<TData, TError, TVariables>`
+ * C. The default value: `= {}`
+ *
+ * **Let's simplify to understand:**
+ *
+ * ```typescript
+ * // Simple version - no destructuring
+ * function example(props: UseCreateProps = {}) { }
+ *                 // ^^^^^                  ^^
+ *                 // param name             default value
+ *
+ * // With destructuring
+ * function example({ resource }: UseCreateProps = {}) { }
+ *                 // ^^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^
+ *                 // destructure type annotation  default value
+ * ```
+ *
+ * **WHY DEFAULT = {} ?**
+ *
+ * This allows calling the hook with NO arguments:
+ *
+ * ```typescript
+ * const { mutate } = useCreate();  // ← Works! Uses {} as default
+ * const { mutate } = useCreate({ resource: "posts" });  // ← Also works!
+ * ```
+ *
+ * Without `= {}`, you'd HAVE to pass an argument (even if empty):
+ * ```typescript
+ * const { mutate } = useCreate();    // ❌ Error: Expected 1 argument
+ * const { mutate } = useCreate({});  // ✅ Required to pass empty object
+ * ```
+ *
+ * **PART 3: RETURN TYPE**
+ *
+ * ```typescript
+ * ): UseCreateReturnType<TData, TError, TVariables> & UseLoadingOvertimeReturnType
+ *    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ *    This is the return type
+ * ```
+ *
+ * After the closing `)` of parameters, before `=>`, you specify the return type.
+ *
+ * The `&` means "intersection type" - combine two types:
+ *
+ * ```typescript
+ * Type A & Type B = {
+ *   ...all properties from Type A,
+ *   ...all properties from Type B
+ * }
+ * ```
+ *
+ * So the hook returns an object that has:
+ * - All properties from UseCreateReturnType (mutate, mutateAsync, isPending, etc.)
+ * - All properties from UseLoadingOvertimeReturnType (elapsedTime)
+ *
+ * **SIMPLIFIED COMPARISON:**
+ *
+ * ```typescript
+ * // JavaScript - simple function
+ * const greet = (name = "Guest") => {
+ *   return `Hello ${name}`;
+ * };
+ *
+ * // TypeScript - with types
+ * const greet = (name: string = "Guest"): string => {
+ *   //           ^^^^              ^^^^^    ^^^^^^
+ *   //           type              default  return type
+ *   return `Hello ${name}`;
+ * };
+ *
+ * // TypeScript - with generics + complex types
+ * const greet = <TName extends string = string>(
+ *   name: TName = "Guest" as TName
+ * ): { message: string; input: TName } => {
+ *   return { message: `Hello ${name}`, input: name };
+ * };
+ * ```
+ *
+ * **READING THE FULL SIGNATURE LINE BY LINE:**
+ *
+ * ```typescript
+ * 217: export const useCreate = <           // 1. Declare function with generics
+ * 218:   TData extends BaseRecord = BaseRecord,    // 2. Generic param 1
+ * 219:   TError extends HttpError = HttpError,     // 3. Generic param 2
+ * 220:   TVariables = {},                           // 4. Generic param 3
+ * 221: >(                                          // 5. Close generics, open params
+ * 222-230: { resource: ..., values: ..., }        // 6. Destructured parameters
+ * 231: }: UseCreateProps<...> = {}                 // 7. Parameter type + default
+ * 231: ): UseCreateReturnType<...>                 // 8. Return type starts
+ * 232-234:   TData, TError, TVariables             // 9. Return type generic args
+ * 235: > & UseLoadingOvertimeReturnType            // 10. Return type intersection
+ * 236: => {                                        // 11. Arrow function body starts
+ * ```
+ *
+ * **IN SUMMARY:**
+ *
+ * The syntax looks complex because it combines:
+ * 1. ✅ Generic type parameters (for type safety)
+ * 2. ✅ Destructured parameters (for cleaner code)
+ * 3. ✅ Type annotations (for TypeScript checking)
+ * 4. ✅ Default values (for optional arguments)
+ * 5. ✅ Return type annotation (for type safety)
+ * 6. ✅ Intersection types (to combine multiple return types)
+ *
+ * Once you understand each piece, it becomes readable! 🎉
+ */
+
 export const useCreate = <
   TData extends BaseRecord = BaseRecord,
   TError extends HttpError = HttpError,
@@ -239,15 +628,116 @@ export const useCreate = <
   // ============================================================================
 
   /**
-   * 📖 GIẢI THÍCH PATTERN "FROMPROPS":
+   * 📖 EXPLAINING THE "FROMPROPS" PATTERN & DESTRUCTURING WITH RENAMING:
    *
-   * Tại sao có "FromProps" ở tên biến?
-   * - resourceFromProps: giá trị resource từ props (config hook)
-   * - Sau này có thể override bằng giá trị từ mutate({ resource: "..." })
+   * **JAVASCRIPT/TYPESCRIPT SYNTAX EXPLANATION:**
    *
-   * VD:
-   * const { mutate } = useCreate({ resource: "posts" });  // resourceFromProps = "posts"
-   * mutate({ resource: "users", values: {...} });          // override thành "users"
+   * When you see this at line 222:
+   * ```typescript
+   * ({
+   *   resource: resourceFromProps,
+   *   values: valuesFromProps,
+   *   ...
+   * }: UseCreateProps<...> = {})
+   * ```
+   *
+   * This is called "DESTRUCTURING WITH RENAMING" (or "destructuring assignment with aliasing")
+   *
+   * **HOW IT WORKS:**
+   *
+   * Normal destructuring (without renaming):
+   * ```typescript
+   * const { resource, values } = props;
+   * // Creates variables: resource, values
+   * ```
+   *
+   * Destructuring WITH renaming:
+   * ```typescript
+   * const { resource: resourceFromProps, values: valuesFromProps } = props;
+   * // Creates variables: resourceFromProps, valuesFromProps
+   * // NOT resource, NOT values
+   * ```
+   *
+   * **SYNTAX BREAKDOWN:**
+   * ```
+   * { propertyName: newVariableName }
+   *   ^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^
+   *   Property in    New variable name
+   *   the object     to use in code
+   * ```
+   *
+   * **WHY YOU CAN'T FIND "resourceFromProps" IN THE OBJECT:**
+   *
+   * When you call useCreate like this:
+   * ```typescript
+   * useCreate({
+   *   resource: "posts",  // ← This is the property name in the object
+   *   values: { ... }
+   * })
+   * ```
+   *
+   * The parameter destructuring extracts it:
+   * ```typescript
+   * { resource: resourceFromProps } = { resource: "posts" }
+   * //          ^^^^^^^^^^^^^^^^^^
+   * //          This is just a NEW variable name
+   * //          The actual property is still "resource"
+   * ```
+   *
+   * So:
+   * - In the object you pass: property is named `resource`
+   * - In the function body: variable is named `resourceFromProps`
+   *
+   * **WHY USE THIS PATTERN?**
+   *
+   * This hook allows overriding values when calling mutate():
+   *
+   * ```typescript
+   * // Step 1: Initialize hook with default resource
+   * const { mutate } = useCreate({
+   *   resource: "posts"  // ← resourceFromProps = "posts"
+   * });
+   *
+   * // Step 2: Can override when calling mutate
+   * mutate({
+   *   resource: "users",  // ← Override! Use "users" instead of "posts"
+   *   values: { name: "John" }
+   * });
+   * ```
+   *
+   * The code later does:
+   * ```typescript
+   * mutationFn: ({
+   *   resource: resourceName = resourceFromProps,  // Use resourceFromProps as default
+   *   // If mutate() doesn't pass resource, use resourceFromProps
+   *   // If mutate() passes resource, use that instead
+   * })
+   * ```
+   *
+   * **ANOTHER EXAMPLE TO CLARIFY:**
+   *
+   * ```typescript
+   * // Without renaming:
+   * function greet({ name }) {
+   *   console.log(name); // Use "name" directly
+   * }
+   * greet({ name: "Alice" });
+   *
+   * // With renaming:
+   * function greetRenamed({ name: userName }) {
+   *   console.log(userName);  // Use "userName" instead
+   *   // console.log(name);   // ❌ ERROR: "name" is not defined
+   * }
+   * greetRenamed({ name: "Alice" });
+   * ```
+   *
+   * **IN SUMMARY:**
+   * - `resource: resourceFromProps` means:
+   *   + Extract the `resource` property from the object
+   *   + Store it in a variable named `resourceFromProps`
+   * - You search for "resourceFromProps" in the object and don't find it because
+   *   it's NOT in the object - it's the NEW variable name created by destructuring
+   * - The actual property in the object is just called `resource`
    */
 
   // Hook để kiểm tra và xử lý lỗi global
