@@ -23,6 +23,183 @@
  *    - Just show an error message?
  * 4. Hook automatically handles the logout/redirect
  *
+ * **🏗️ ROLE IN REFINE ARCHITECTURE:**
+ *
+ * This hook is a CRITICAL piece of Refine's error handling infrastructure.
+ * It serves as the **CENTRAL ERROR HANDLER** for all data operations.
+ *
+ * ```
+ * ┌─────────────────────────────────────────────────────────────────┐
+ * │                    REFINE ARCHITECTURE                          │
+ * └─────────────────────────────────────────────────────────────────┘
+ *
+ *         ┌──────────────────────────────────────┐
+ *         │   USER INTERFACE (Your Components)  │
+ *         └──────────────────────────────────────┘
+ *                        ↓
+ *                  Uses hooks:
+ *                        ↓
+ *    ┌──────────────────────────────────────────────────┐
+ *    │  DATA HOOKS (useCreate, useUpdate, useDelete)    │
+ *    │  - Perform CRUD operations                       │
+ *    │  - Handle success/error                          │
+ *    └──────────────────────────────────────────────────┘
+ *                        ↓ (on error)
+ *                 Automatically calls
+ *                        ↓
+ *    ┌──────────────────────────────────────────────────┐
+ *    │  👉 useOnError (THIS HOOK)                       │
+ *    │  - Centralizes error handling                    │
+ *    │  - Detects auth errors (401, 403)                │
+ *    │  - Triggers logout/redirect if needed            │
+ *    └──────────────────────────────────────────────────┘
+ *                        ↓ calls
+ *    ┌──────────────────────────────────────────────────┐
+ *    │  YOUR authProvider.onError                       │
+ *    │  - Your custom business logic                    │
+ *    │  - Decides what to do with each error            │
+ *    └──────────────────────────────────────────────────┘
+ *                        ↓ returns
+ *            { logout: boolean, redirectTo: string }
+ *                        ↓
+ *    ┌──────────────────────────────────────────────────┐
+ *    │  useLogout / useGo                               │
+ *    │  - Executes the logout action                    │
+ *    │  - Performs navigation                           │
+ *    └──────────────────────────────────────────────────┘
+ * ```
+ *
+ * **🎯 KEY ARCHITECTURAL BENEFITS:**
+ *
+ * 1. **CENTRALIZATION:**
+ *    - All errors flow through ONE place
+ *    - No need to handle auth errors in every component
+ *    - Consistent error handling across the entire app
+ *
+ * 2. **SEPARATION OF CONCERNS:**
+ *    - Data hooks focus on data operations (useCreate, useUpdate)
+ *    - THIS hook focuses on error handling
+ *    - authProvider contains business logic
+ *    - Each layer has a single responsibility
+ *
+ * 3. **AUTOMATIC INTEGRATION:**
+ *    - You don't manually call useOnError in components
+ *    - Data hooks (useCreate, useUpdate, etc.) automatically use it
+ *    - Just define authProvider.onError once, it works everywhere
+ *
+ * 4. **DECLARATIVE ERROR HANDLING:**
+ *    - You declare WHAT should happen (logout: true)
+ *    - Refine handles HOW it happens (clears tokens, redirects, etc.)
+ *
+ * **📦 WHERE IS THIS USED IN REFINE?**
+ *
+ * This hook is automatically called by ALL data hooks when errors occur:
+ *
+ * ```typescript
+ * // packages/core/src/hooks/data/useCreate.ts
+ * export const useCreate = () => {
+ *   const { mutate: checkError } = useOnError();  // ← AUTO-INTEGRATED
+ *
+ *   return useMutation({
+ *     mutationFn: createData,
+ *     onError: (error) => {
+ *       checkError(error);  // ← Automatically checks for auth errors
+ *       showNotification({ type: "error", message: "Creation failed" });
+ *     }
+ *   });
+ * };
+ *
+ * // Same pattern in:
+ * // - useUpdate.ts
+ * // - useDelete.ts
+ * // - useDeleteMany.ts
+ * // - useCustomMutation.ts
+ * // - useInfiniteList.ts
+ * // ... and more!
+ * ```
+ *
+ * **🔄 REAL-WORLD FLOW EXAMPLE:**
+ *
+ * User tries to update a post after their session expired:
+ *
+ * ```
+ * 1. Component:
+ *    const { mutate: updatePost } = useUpdate();
+ *    updatePost({ id: 1, data: { title: "New" } });
+ *
+ * 2. useUpdate hook:
+ *    → Calls API: PATCH /posts/1
+ *    → API returns: 401 Unauthorized (session expired)
+ *    → onError triggered
+ *
+ * 3. useUpdate internally calls useOnError:
+ *    → checkError({ status: 401, message: "Unauthorized" })
+ *
+ * 4. useOnError calls your authProvider:
+ *    → authProvider.onError({ status: 401 })
+ *    → YOU return: { logout: true, redirectTo: "/login" }
+ *
+ * 5. useOnError processes the response:
+ *    → Sees logout: true
+ *    → Calls useLogout({ redirectPath: "/login" })
+ *
+ * 6. useLogout executes:
+ *    → Clears localStorage tokens
+ *    → Resets auth state
+ *    → Redirects to /login
+ *
+ * 7. User sees login page with message:
+ *    "Your session has expired. Please login again."
+ * ```
+ *
+ * **🎭 DESIGN PATTERN:**
+ *
+ * This implements the **Observer Pattern** + **Strategy Pattern**:
+ *
+ * - **Observer:** Data hooks observe errors and notify useOnError
+ * - **Strategy:** You provide the strategy (authProvider.onError)
+ * - **Command:** useOnError executes commands (logout, redirect)
+ *
+ * **🆚 WITHOUT THIS HOOK (Manual Approach):**
+ *
+ * ```typescript
+ * // ❌ Without useOnError - MESSY AND REPETITIVE:
+ *
+ * // In EVERY component:
+ * const updatePost = async () => {
+ *   try {
+ *     await fetch("/api/posts/1", { method: "PATCH" });
+ *   } catch (error) {
+ *     if (error.status === 401) {
+ *       localStorage.removeItem("token");
+ *       window.location.href = "/login";
+ *     } else if (error.status === 403) {
+ *       window.location.href = "/access-denied";
+ *     }
+ *   }
+ * };
+ *
+ * // Repeat this in EVERY component that makes API calls! 😱
+ * ```
+ *
+ * ```typescript
+ * // ✅ With useOnError - CLEAN AND CENTRALIZED:
+ *
+ * // Define ONCE in authProvider:
+ * const authProvider = {
+ *   onError: async (error) => {
+ *     if (error.status === 401) return { logout: true, redirectTo: "/login" };
+ *     if (error.status === 403) return { redirectTo: "/access-denied" };
+ *     return {};
+ *   }
+ * };
+ *
+ * // Use ANYWHERE without worrying about auth errors:
+ * const { mutate: updatePost } = useUpdate();
+ * updatePost({ id: 1, data: { title: "New" } });
+ * // Auth errors handled automatically! ✨
+ * ```
+ *
  * **EXAMPLE USAGE:**
  *
  * ```typescript
@@ -487,6 +664,122 @@ export function useOnError(): UseOnErrorReturnType {
 
           /**
            * onSuccess: Called after authProvider.onError succeeds
+           *
+           * **❓ QUESTION: "Ai trả về logout và redirectTo cho onSuccess?"**
+           *
+           * ✅ ANSWER: Chính authProvider.onError() của BẠN trả về!
+           *
+           * **THE COMPLETE FLOW:**
+           *
+           * ```typescript
+           * // 1. BẠN ĐỊNH NGHĨA authProvider:
+           * const authProvider = {
+           *   onError: async (error) => {
+           *     if (error.status === 401) {
+           *       return {
+           *         logout: true,           // ← BẠN TRẢ VỀ
+           *         redirectTo: "/login"    // ← BẠN TRẢ VỀ
+           *       };
+           *     }
+           *     return {};
+           *   }
+           * };
+           *
+           * // 2. REACT QUERY GỌI mutationFn (line 486):
+           * const result = await onErrorFromContext(error);
+           * // result = { logout: true, redirectTo: "/login" }  ← Từ authProvider
+           *
+           * // 3. REACT QUERY TỰ ĐỘNG GỌI onSuccess VỚI result:
+           * onSuccess(result);  // onSuccess({ logout: true, redirectTo: "/login" })
+           *
+           * // 4. DESTRUCTURE TRONG PARAMETER:
+           * // { logout: shouldLogout, redirectTo }
+           * // shouldLogout = true
+           * // redirectTo = "/login"
+           * ```
+           *
+           * **DATA FLOW DIAGRAM:**
+           *
+           * ```
+           * authProvider.onError(error)
+           *        ↓
+           *   Returns { logout: true, redirectTo: "/login" }
+           *        ↓
+           *   mutationFn receives this return value
+           *        ↓
+           *   React Query captures the result
+           *        ↓
+           *   React Query automatically calls: onSuccess(result)
+           *        ↓
+           *   onSuccess({ logout: true, redirectTo: "/login" })
+           *        ↓
+           *   Destructured as: shouldLogout=true, redirectTo="/login"
+           *        ↓
+           *   Execute: logout({ redirectPath: "/login" })
+           * ```
+           *
+           * **REAL EXAMPLE:**
+           *
+           * ```typescript
+           * // Your authProvider
+           * const authProvider = {
+           *   onError: async (error) => {
+           *     console.log("1. onError called:", error);
+           *
+           *     if (error.status === 401) {
+           *       console.log("2. Returning { logout: true, redirectTo: '/login' }");
+           *       return { logout: true, redirectTo: "/login" };  // ← SOURCE!
+           *     }
+           *     return {};
+           *   }
+           * };
+           *
+           * // When error occurs
+           * checkError({ status: 401 });
+           *
+           * // Console output:
+           * // 1. onError called: { status: 401 }
+           * // 2. Returning { logout: true, redirectTo: '/login' }
+           * // 3. onSuccess receives: { logout: true, redirectTo: '/login' }
+           * // 4. Calling logout with redirectPath: /login
+           * ```
+           *
+           * **WHY THIS PATTERN?**
+           *
+           * This is the **Hollywood Principle**: "Don't call us, we'll call you"
+           *
+           * - YOU define the business logic (what to do for each error)
+           * - REFINE handles the infrastructure (calling logout, redirecting, etc.)
+           * - You just return data, Refine executes the actions
+           *
+           * **ALTERNATIVE (Without this pattern):**
+           *
+           * ```typescript
+           * // ❌ Manual approach (messy):
+           * const authProvider = {
+           *   onError: async (error) => {
+           *     if (error.status === 401) {
+           *       // You have to manually logout
+           *       localStorage.removeItem("token");
+           *       // You have to manually redirect
+           *       window.location.href = "/login";
+           *     }
+           *   }
+           * };
+           * ```
+           *
+           * ```typescript
+           * // ✅ Declarative approach (clean):
+           * const authProvider = {
+           *   onError: async (error) => {
+           *     if (error.status === 401) {
+           *       // Just return what SHOULD happen
+           *       return { logout: true, redirectTo: "/login" };
+           *       // Refine handles the HOW
+           *     }
+           *   }
+           * };
+           * ```
            *
            * @param logout - Should we logout the user? (from authProvider)
            * @param redirectTo - Where to redirect? (from authProvider)
